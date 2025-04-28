@@ -1,23 +1,55 @@
 @Entry
 @Component
 struct Index {
-  @State message: string = 'Hello World';
+  //记录当前界面下标
+  @State currentIndex: number = 0;
+  private tabsController: TabsController = new TabsController() ;
+  //单个tab内容组件
+  @Builder TabBuilder(title: string, targetIndex: number, selectedImg: Resource, normalImg: Resource) {
+    Column() {
+      Image(this.currentIndex === targetIndex ? selectedImg : normalImg)
+        .size({ width: 25, height: 25 })
+        .objectFit(ImageFit.Contain)
+      Text(title)
+        .fontColor(this.currentIndex === targetIndex ? '#1698CE' : '#6B6B6B')
+    }
+    .width('100%')
+    .height(50)
+    .justifyContent(FlexAlign.Center)
+    .onClick( () => {
+      this.currentIndex = targetIndex ;
+      this.tabsController.changeIndex(this.currentIndex) ;
+    })
+  }
 
   build() {
-    RelativeContainer() {
-      Text(this.message)
-        .id('HelloWorld')
-        .fontSize($r('app.float.page_text_font_size'))
-        .fontWeight(FontWeight.Bold)
-        .alignRules({
-          center: { anchor: '__container__', align: VerticalAlign.Center },
-          middle: { anchor: '__container__', align: HorizontalAlign.Center }
-        })
-        .onClick(() => {
-          this.message = 'Welcome';
-        })
+
+    Tabs({ barPosition: BarPosition.End , controller: this.tabsController}){
+
+      TabContent(){
+        Text('博物馆')
+      }
+      .tabBar(this.TabBuilder( '首页' , 0 , $r('app.media.Museum_on') , $r('app.media.Museum_off')))
+
+      TabContent(){
+        Text('文物')
+      }
+      .tabBar(this.TabBuilder( '文物' , 1 , $r('app.media.antique_on') , $r('app.media.antique_off')))
+
+      TabContent(){
+        Text('动态')
+      }
+      .tabBar(this.TabBuilder( '动态' , 2 , $r('app.media.information_on') , $r('app.media.information_off')))
+
+      TabContent(){
+        Text('个人')
+      }
+      .tabBar(this.TabBuilder( '个人' , 3 , $r('app.media.person_on') , $r('app.media.person_off')))
+
     }
-    .height('100%')
-    .width('100%')
+    .barWidth('100%')
+    .barHeight(56)
+    .barMode(BarMode.Fixed)
+
   }
 }
