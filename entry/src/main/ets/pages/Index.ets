@@ -1,3 +1,4 @@
+import Antique from './Antique'
 @Entry
 @Component
 struct Index {
@@ -32,7 +33,7 @@ struct Index {
       .tabBar(this.TabBuilder( '首页' , 0 , $r('app.media.Museum_on') , $r('app.media.Museum_off')))
 
       TabContent(){
-        Text('文物')
+        Antique()
       }
       .tabBar(this.TabBuilder( '文物' , 1 , $r('app.media.antique_on') , $r('app.media.antique_off')))
 
