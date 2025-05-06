@@ -5,7 +5,7 @@ const neo4jService = require('../services/neo4jService')
 
 // 获取文物列表
 router.get('/list', (req, res) => {
-    const sql = 'SELECT c.relic_id id, c.name name, i.img_url image, c.type type FROM cultural_relic c JOIN image i ON c.relic_id=i.relic_id';  // 确保 antiques 表中有这些字段
+    const sql = 'SELECT c.relic_id id, c.name name, i.img_url image, c.dynasty type FROM cultural_relic c JOIN relic_image i ON c.relic_id=i.relic_id';
     mysqlService.query(sql, (err, results) => {
         if (err) {
             console.error('查询失败:', err);
@@ -16,7 +16,7 @@ router.get('/list', (req, res) => {
         const formatted = results.map(item => ({
             id: item.id,
             name: item.name,
-            image: item.image,      // 应该是完整图片 URL 或静态文件路径
+            image: item.image,
             category: item.type
         }));
 
