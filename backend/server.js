@@ -1,5 +1,6 @@
 const express = require('express')
 const antiqueRoutes = require('./routes/antique')
+const museumRoutes = require('./routes/Museum')
 const cors = require('cors')
 
 const app = express()
@@ -10,6 +11,7 @@ app.use(express.json())
 
 // 挂载文物相关API
 app.use('/api/antique', antiqueRoutes)
+app.use('/api/museum', museumRoutes)
 
 app.listen(PORT, () => {
     console.log(`✅ 后端服务已启动: http://localhost:${PORT}`)

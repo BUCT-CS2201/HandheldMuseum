@@ -1,4 +1,5 @@
 import Antique from './Antique'
+import Museum from './Museum'
 @Entry
 @Component
 struct Index {
@@ -28,7 +29,7 @@ struct Index {
     Tabs({ barPosition: BarPosition.End , controller: this.tabsController}){
 
       TabContent(){
-        Text('博物馆')
+        Museum()
       }
       .tabBar(this.TabBuilder( '首页' , 0 , $r('app.media.Museum_on') , $r('app.media.Museum_off')))
 
