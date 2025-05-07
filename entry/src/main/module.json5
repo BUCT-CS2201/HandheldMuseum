@@ -26,7 +26,8 @@
               "entity.system.home"
             ],
             "actions": [
-              "action.system.home"
+              "action.system.home",
+              "action.router"
             ]
           }
         ]

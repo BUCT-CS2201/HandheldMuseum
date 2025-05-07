@@ -23,5 +23,28 @@ router.get('/list', (req, res) => {
         res.json(formatted);
     });
 });
+// ✅ 获取文物详情（含多图和视频）
+router.get('/detail/:id', (req, res) => {
+    const id = req.params.id
+    const sql = `
+    SELECT
+      a.relic_id, a.name, a.type, a.size, a.matrials, a.dynasty, a.author, a.entry_time, a.description,
+      GROUP_CONCAT(DISTINCT ai.img_url) AS images,
+      GROUP_CONCAT(DISTINCT av.video_url) AS videos
+    FROM cultural_relic a
+    LEFT JOIN relic_image ai ON a.relic_id = ai.relic_id
+    LEFT JOIN relic_video av ON a.relic_id = av.relic_id AND av.is_official=1
+    WHERE a.relic_id = ?
+    GROUP BY a.relic_id
+  `
+    mysqlService.query(sql, [id], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message })
+        if (results.length === 0) return res.status(404).json({ error: 'Not found' })
 
+        const item = results[0]
+        item.images = item.images ? item.images.split(',') : []
+        item.videos = item.videos ? item.videos.split(',') : []
+        res.json(item)
+    })
+});
 module.exports = router

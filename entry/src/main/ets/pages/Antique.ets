@@ -1,5 +1,6 @@
 import http from '@ohos.net.http'
 import router from '@ohos.router'
+import {BusinessError} from '@kit.BasicServicesKit'
 
 interface AntiqueItem {
   id: number;
@@ -7,7 +8,7 @@ interface AntiqueItem {
   image: string;
   category: string;
 }
-
+@Entry
 @Component
 export default struct Antique {
   @State searchText: string = ''
@@ -30,7 +31,7 @@ export default struct Antique {
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      'http://192.168.120.1:3000/api/antique/list',
+      'http://192.168.198.1:3000/api/antique/list',
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && typeof data.result === 'string') {
@@ -65,13 +66,12 @@ export default struct Antique {
       return nameMatch && isInCategory
     })
   }
-
   build() {
     Column() {
-      // ✅ 固定顶部：搜索框 + 分类标签
-      // 🔍 搜索框区域
+      // 固定顶部：搜索框 + 分类标签
+      // 搜索框区域
       Row() {
-        Image($r('app.media.search_icon'))  // 你可以用 🔍 图标的资源文件
+        Image($r('app.media.search_icon'))
           .width(20)
           .height(20)
           .margin({ left: 12, right: 8 })
@@ -125,7 +125,6 @@ export default struct Antique {
         },(cat:string)=>cat)
       }
       .margin({ left: 1, right: 1, bottom: 10 })
-
       // ✅ 滚动区域：文物卡片列表
       Scroll() {
         Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
@@ -150,12 +149,12 @@ export default struct Antique {
             .onClick(() => {
               router.pushUrl({
                 url: 'pages/AntiqueDetail',
-                params: {
-                  item: JSON.stringify(item)  // 传递字符串化的对象
-                }
+                params: { id: item.id.toString() }
+              }).catch((err: BusinessError) => {
+                console.error(`跳转失败: ${err.message}`)
               })
             })
-          })
+          }, (item: AntiqueItem) => item.id.toString())
         }
         .width('100%')
       }
