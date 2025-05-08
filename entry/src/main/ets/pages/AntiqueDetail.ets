@@ -1,12 +1,12 @@
 import http from '@ohos.net.http';
 import router from '@ohos.router';
 
-// 定义路由参数类型
+// 路由参数类型
 interface RouterParams {
-  id?: string | number;
+  id?: number;
 }
 
-// 定义文物详情类型
+// 文物详情类型
 interface AntiqueDetailItem {
   relic_id: number;
   name: string;
@@ -17,18 +17,17 @@ interface AntiqueDetailItem {
   author: string;
   entry_time: string;
   description: string;
-  images: string[];  // 明确为字符串数组
-  videos: string[];  // 明确为字符串数组
+  images: string[];
+  videos: string[];
 }
 
-// 定义更灵活的服务器响应类型
+// 接口返回类型（数据库字段为 matrials）
 interface AntiqueResponse {
   relic_id?: number;
   name?: string;
   type?: string;
   size?: string;
-  materials?: string;
-  matrials?: string; // 兼容可能的拼写错误
+  matrials?: string;
   dynasty?: string;
   author?: string;
   entry_time?: string;
@@ -64,7 +63,7 @@ struct AntiqueDetail {
 
   fetchAntiqueDetail(id: number): void {
     const httpRequest = http.createHttp();
-    const url = `http://192.168.198.1:3000/api/antique/detail/${id}`;
+    const url = `http://10.4.72.189:3000/api/antique/detail/${id}`;
     console.log('请求的URL:', url);
 
     httpRequest.request(
@@ -75,7 +74,7 @@ struct AntiqueDetail {
       },
       (err, data) => {
         if (err) {
-          console.error('请求失败:', err);
+          console.error('请求失败:', err?.code, err?.message, JSON.stringify(err));
           return;
         }
 
@@ -88,12 +87,10 @@ struct AntiqueDetail {
           } else if (typeof data.result === 'object') {
             parsed = data.result as AntiqueResponse;
           } else {
-            console.warn('返回格式异常，既不是字符串也不是对象:', typeof data.result);
+            console.warn('返回格式异常:', typeof data.result);
           }
 
-          console.log('解析后的数据对象:', parsed);
-
-          // 处理 images 字段
+          // 处理 images
           let images: string[] = [];
           if (typeof parsed.images === 'string') {
             images = parsed.images.split(',').map(item => item.trim()).filter(item => item !== '');
@@ -101,7 +98,7 @@ struct AntiqueDetail {
             images = parsed.images.filter((item: string) => typeof item === 'string');
           }
 
-          // 处理 videos 字段
+          // 处理 videos
           let videos: string[] = [];
           if (typeof parsed.videos === 'string') {
             videos = parsed.videos.split(',').map(item => item.trim()).filter(item => item !== '');
@@ -109,13 +106,13 @@ struct AntiqueDetail {
             videos = parsed.videos.filter((item: string) => typeof item === 'string');
           }
 
-          // 打印每一个字段以确认是否成功赋值
+          // 打印字段
           console.log('字段详情:');
           console.log('relic_id:', parsed.relic_id);
           console.log('name:', parsed.name);
           console.log('type:', parsed.type);
           console.log('size:', parsed.size);
-          console.log('materials:', parsed.materials || parsed.matrials);
+          console.log('materials:', parsed.matrials);
           console.log('dynasty:', parsed.dynasty);
           console.log('author:', parsed.author);
           console.log('entry_time:', parsed.entry_time);
@@ -123,13 +120,12 @@ struct AntiqueDetail {
           console.log('images:', images);
           console.log('videos:', videos);
 
-          // 更新状态
           this.antique = {
-            relic_id: parsed.relic_id || 0,
+            relic_id: typeof parsed.relic_id === 'number' ? parsed.relic_id : 0,
             name: parsed.name || '',
             type: parsed.type || '',
             size: parsed.size || '',
-            materials: parsed.materials || parsed.matrials || '',
+            materials: parsed.matrials || '',
             dynasty: parsed.dynasty || '',
             author: parsed.author || '',
             entry_time: parsed.entry_time || '',
@@ -144,14 +140,13 @@ struct AntiqueDetail {
     );
   }
 
-
   build() {
     Column() {
       // 返回按钮
       Row() {
         Button('返回')
           .onClick(() => {
-            router.back();  // 返回上一页
+            router.back();
           })
           .width(80)
           .height(40)
@@ -164,7 +159,7 @@ struct AntiqueDetail {
 
       Scroll() {
         Column() {
-          // 图片展示区域
+          // 图片区域
           if (this.antique.images.length > 0) {
             Text('图片')
               .fontSize(18)
@@ -188,7 +183,7 @@ struct AntiqueDetail {
             .width('100%');
           }
 
-          // 视频展示区域
+          // 视频区域
           if (this.antique.videos.length > 0) {
             Text('视频')
               .fontSize(18)
@@ -198,9 +193,7 @@ struct AntiqueDetail {
             Scroll() {
               Row() {
                 ForEach(this.antique.videos, (video: string) => {
-                  Video({
-                    src: video
-                  })
+                  Video({ src: video })
                     .width(250)
                     .height(180)
                     .margin({ left: 10, right: 10 })
@@ -216,30 +209,120 @@ struct AntiqueDetail {
             .width('100%');
           }
 
-          // 文物详细信息
+          // 信息区
           Column() {
+            // 文物名称（居中显示）
             Text(this.antique.name)
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
-              .margin({ top: 20, bottom: 12 });
+              .margin({ top: 20, bottom: 16 })
+              .width('100%')
+              .textAlign(TextAlign.Center)
 
-            this.infoText('类型', this.antique.type);
-            this.infoText('尺寸', this.antique.size);
-            this.infoText('材料', this.antique.materials);
-            this.infoText('朝代', this.antique.dynasty);
-            this.infoText('作者', this.antique.author);
-            this.infoText('入藏时间', this.antique.entry_time);
+            // 信息项容器（白色卡片）
+            Column() {
+              // 类型
+              Row() {
+                Text('类型：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.type || '未知类型')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .textAlign(TextAlign.Start)
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
 
-            Text('文物简介')
-              .fontSize(18)
-              .fontWeight(FontWeight.Medium)
-              .margin({ top: 16, bottom: 8 });
+              // 尺寸
+              Row() {
+                Text('尺寸：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.size || '未知尺寸')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .textAlign(TextAlign.Start)
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
 
-            Text(this.antique.description)
-              .fontSize(14)
-              .lineHeight(22)
-              .fontColor('#444444');
+              // 材料
+              Row() {
+                Text('材料：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.materials || '未知材料')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .textAlign(TextAlign.Start)
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
+
+              // 朝代
+              Row() {
+                Text('朝代：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.dynasty || '未知朝代')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .textAlign(TextAlign.Start)
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
+
+              // 作者
+              Row() {
+                Text('作者：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.author || '未知作者')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .textAlign(TextAlign.Start)
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
+            }
+            .width('100%')
+            .padding(16)
+            .backgroundColor('#FFFFFF')
+            .borderRadius(12)
+            .margin({ bottom: 16, left: 12, right: 12 })
+
+            // 文物简介
+            Column() {
+              Text('文物简介')
+                .fontSize(18)
+                .fontWeight(FontWeight.Medium)
+                .margin({ bottom: 8 })
+                .width('100%')
+
+              Text(this.antique.description || '暂无描述信息')
+                .fontSize(14)
+                .lineHeight(22)
+                .fontColor('#444444')
+                .width('100%')
+            }
+            .width('100%')
+            .padding(16)
+            .backgroundColor('#FFFFFF')
+            .borderRadius(12)
           }
+          .width('100%')
+          .padding(12)
           .padding(16)
           .backgroundColor('#FFFFFF')
           .borderRadius(12)
@@ -248,20 +331,5 @@ struct AntiqueDetail {
       }
       .backgroundColor('#F5F5F5');
     }
-  }
-
-  @Builder
-  infoText(label: string, value: string) {
-    Row() {
-      Text(`${label}：`)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .width(80);
-
-      Text(value || '未知')
-        .fontSize(14)
-        .fontColor('#666666');
-    }
-    .margin({ bottom: 6 });
   }
 }

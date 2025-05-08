@@ -23,15 +23,13 @@ export default struct Antique {
     '明': ['明', '明朝'],
     '清': ['清', '清朝']
   }
-
   aboutToAppear() {
     this.fetchData()
   }
-
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      'http://192.168.198.1:3000/api/antique/list',
+      'http://10.4.72.189:3000/api/antique/list',
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && typeof data.result === 'string') {
