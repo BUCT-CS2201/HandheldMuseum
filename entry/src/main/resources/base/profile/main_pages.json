@@ -3,6 +3,9 @@
     "pages/Index",
     "pages/Museum",
     "pages/Antique",
-    "pages/AntiqueDetail"
+    "pages/AntiqueDetail",
+    "pages/NoticeDetail",
+    "pages/MuseumInfo",
+    "pages/MuseumDetail"
   ]
 }
