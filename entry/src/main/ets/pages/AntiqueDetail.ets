@@ -63,7 +63,7 @@ struct AntiqueDetail {
 
   fetchAntiqueDetail(id: number): void {
     const httpRequest = http.createHttp();
-    const url = `http://10.4.72.189:3000/api/antique/detail/${id}`;
+    const url = `http://localhost:3000/api/antique/detail/${id}`;
     console.log('请求的URL:', url);
 
     httpRequest.request(

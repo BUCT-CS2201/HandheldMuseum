@@ -29,7 +29,7 @@ export default struct Antique {
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      'http://10.4.72.189:3000/api/antique/list',
+      'http://localhost:3000/api/antique/list',
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && typeof data.result === 'string') {
