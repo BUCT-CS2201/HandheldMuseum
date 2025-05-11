@@ -5,4 +5,4 @@ export interface UserInfo {
   email?: string;
   phone?: string;
   bio?: string;
-} 
+}
