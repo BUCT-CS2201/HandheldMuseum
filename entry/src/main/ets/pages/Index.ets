@@ -1,6 +1,10 @@
 import Antique from './Antique'
 import Museum from './Museum'
+
 import { Personal } from './Personal';
+
+import DynamicItem from './UserDynamic'
+
 
 @Entry
 @Component
@@ -41,12 +45,18 @@ struct Index {
       .tabBar(this.TabBuilder( '文物' , 1 , $r('app.media.antique_on') , $r('app.media.antique_off')))
 
       TabContent(){
+
         Text('动态')
+
+
       }
       .tabBar(this.TabBuilder( '动态' , 2 , $r('app.media.information_on') , $r('app.media.information_off')))
 
       TabContent(){
+
         Personal()
+
+
       }
       .tabBar(this.TabBuilder( '个人' , 3 , $r('app.media.person_on') , $r('app.media.person_off')))
 

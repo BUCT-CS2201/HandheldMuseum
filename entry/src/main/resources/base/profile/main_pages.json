@@ -15,5 +15,6 @@
     "pages/Settings",
     "pages/DynamicPublish",
     "pages/UserDynamic"
+
   ]
 }

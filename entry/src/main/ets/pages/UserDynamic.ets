@@ -1,192 +1,21 @@
-import router from "@ohos.router";
+// DynamicPage.ets
+import router from '@ohos.router';
+import http from '@ohos.net.http';
+import { ImageItem, CommentItem, DynamicItem, APIDynamicResponse, APICommentItem } from '../common/types/DynamicTypes';
+import EventHub from '../common/utils/EventHub';
 
-export { CommentItem, DynamicItem };
-// 评论数据结构
-class CommentItem {
-  id: number;
-  user: string;
-  content: string;
-  time: string;
-
-  constructor(id: number, user: string, content: string, time: string) {
-    this.id = id;
-    this.user = user;
-    this.content = content;
-    this.time = time;
-  }
-}
-
-// 动态数据结构
-class DynamicItem {
-  id: number;
-  avatar: Resource;
-  username: string;
-  content: string;
-  time: string;
-  likes: number;
-  isLiked: boolean;
-  images?: string[]; // 更新为 string[]
-  comments: CommentItem[];
-
-  constructor(
-    id: number,
-    avatar: Resource,
-    username: string,
-    content: string,
-    time: string,
-    likes: number,
-    images?: string[],
-    isLiked: boolean = false,
-    comments: CommentItem[] = []
-  ) {
-    this.id = id;
-    this.avatar = avatar;
-    this.username = username;
-    this.content = content;
-    this.time = time;
-    this.likes = likes;
-    this.images = images;
-    this.isLiked = isLiked;
-    this.comments = comments;
-  }
-}
-
-// 临时测试数据
-const mockData: DynamicItem[] = [
-  new DynamicItem(
-    1,
-    $r('app.media.user_avatar1'),
-    '考古爱好者',
-    '今天在故宫看到了这件青花瓷，釉色太美了！',
-    '2小时前',
-    15,
-    [
-      'app.media.dynamic_img1',
-      'app.media.dynamic_img2'
-    ],
-    false,
-    [
-      new CommentItem(1, '博物馆迷', '这件文物在哪个展厅？', '1小时前'),
-      new CommentItem(2, '历史学生', '釉色工艺确实精湛！', '30分钟前')
-    ]
-  ),
-  new DynamicItem(
-    2,
-    $r('app.media.user_avatar2'),
-    '历史研究员',
-    '分享一本关于青铜器的好书：《中国古代青铜器鉴赏》',
-    '5小时前',
-    8,
-    ['app.media.dynamic_img3'],
-    true
-  )
-];
-
-@Entry
-@Component
-struct UserDynamic {
-  @StorageLink('dynamics') dynamics: DynamicItem[] = mockData
-  aboutToAppear() {
-    // 初始化加载数据
-    if (!AppStorage.get('dynamics')) {
-      AppStorage.setOrCreate('dynamics', mockData);
-    }
-  }
-
-  build() {
-    Column() {
-      // 标题栏
-      Row() {
-        Text('用户动态')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .layoutWeight(1)
-
-        Button('+ 发布')
-          .width(100)        // 明确按钮尺寸
-          .height(56)        // 符合Material Design规范
-          .fontSize(18)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#ff0f0f10')
-          .fontWeight(FontWeight.Bold)
-          .borderRadius(28)  // 椭圆形参数（高度56时半径28）
-          .onClick(() => {
-            router.pushUrl({
-              url: 'pages/DynamicPublish'
-            })
-          })
-      }
-      .padding(10)
-      .width('100%')
-
-      // 动态列表
-      List({ space: 12 }) {
-        ForEach(this.dynamics, (item: DynamicItem, index?: number) => {
-          ListItem() {
-            DynamicItemComponent({
-              item: item,
-              onLike: (isLiked: boolean) => {
-                if (typeof index === 'number') {
-                  this.dynamics[index] = new DynamicItem(
-                    item.id,
-                    item.avatar,
-                    item.username,
-                    item.content,
-                    item.time,
-                    isLiked ? item.likes - 1 : item.likes + 1,
-                    item.images,
-                    !isLiked,
-                    item.comments // 👍 保留原有评论，不改动
-                  )
-
-                }
-              },
-              onComment: (newComment: CommentItem) => {
-                if (typeof index === 'number') {
-                  const updatedItem = new DynamicItem(
-                    item.id,
-                    item.avatar,
-                    item.username,
-                    item.content,
-                    item.time,
-                    item.likes,
-                    item.images,
-                    item.isLiked,
-                    [...item.comments, newComment] // 👈 更新评论数组
-                  )
-                  this.dynamics[index] = updatedItem; // ✅ 触发响应式更新
-                  AppStorage.set('dynamics', this.dynamics); // ✅ 持久化存储更新
-                }
-              }
-            })
-          }
-          .padding(8)
-        })
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .divider({ strokeWidth: 0.5, color: '#eeeeee' })
-    }
-    .backgroundColor('#F8F8F8')
-  }
-  onPageShow() {
-    const storedDynamics = AppStorage.get<DynamicItem[]>('dynamics');
-    this.dynamics = storedDynamics ? [...storedDynamics] : []; // 修正变量名拼写
-  }
-}
+// 本地图片存储配置
+const LOCAL_IMAGE_BASE = 'file:///data/storage/el2/base/cache/uploads/';
+const BACKEND_IMAGE_BASE = 'http://localhost:3000/uploads/';
 
 @Component
 struct DynamicItemComponent {
-  @Prop item: DynamicItem
-  private onLike: (isLiked: boolean) => void = () => {}
-  private onComment: (comment: CommentItem) => void = () => {}
-  @State showComments: boolean = false
-  @State showCommentDialog: boolean = false
-  @State commentText: string = ''
+  @Prop item: DynamicItem;
+  @State isLiked: boolean = false;
+  @State showComments: boolean = false;
 
   build() {
     Column() {
-      // 卡片容器
       Column() {
         // 用户信息
         Row() {
@@ -195,238 +24,380 @@ struct DynamicItemComponent {
             .height(48)
             .borderRadius(24)
             .margin({ right: 12 })
-
           Column() {
             Text(this.item.username)
               .fontSize(16)
-              .fontColor('#333333')
-              .fontWeight(FontWeight.Medium)
-
             Text(this.item.time)
               .fontSize(12)
               .fontColor('#999999')
-              .margin({ top: 2 })
           }
-          .alignItems(HorizontalAlign.Start)
         }
-        .width('100%')
 
         // 动态内容
         Text(this.item.content)
-          .fontSize(15)
-          .fontColor('#444444')
-          .lineHeight(20)
-          .margin({ top: 12, bottom: 8 })
-          .width('100%')
+          .margin({ top: 12, bottom: 12 })
 
         // 图片展示
-        if (this.item.images && this.item.images.length > 0) {
+        if (this.item.images.length > 0) {
           Grid() {
             ForEach(this.item.images, (imgPath: string) => {
               GridItem() {
-                // 判断是否为本地图片路径
-                if(this.getImagePath(imgPath)==false) {
-                  Image($r(imgPath))// 使用 $r 处理字符串路径
-                    //Image(this.getImagePath(imgPath)) // 直接传递处理后的路径
-                    .width('100%')
-                    .aspectRatio(1)
-                    .objectFit(ImageFit.Cover)
-                    .borderRadius(8)
-                    .transition({
-                      type: TransitionType.All,
-                      scale: { x: 0.95, y: 0.95 }
-                    })
-                }
-                else{
-                  Image(imgPath)// 使用 $r 处理字符串路径
-                    //Image(this.getImagePath(imgPath)) // 直接传递处理后的路径
-                    .width('100%')
-                    .aspectRatio(1)
-                    .objectFit(ImageFit.Cover)
-                    .borderRadius(8)
-                    .transition({
-                      type: TransitionType.All,
-                      scale: { x: 0.95, y: 0.95 }
-                    })
-                }
+                Image(imgPath)
+                  .width('100%')
+                  .aspectRatio(1)
+                  .objectFit(ImageFit.Cover)
+                  .borderRadius(8)
+                  .onError(() => {
+                    console.error('图片加载失败:', imgPath);
+                  })
               }
             })
           }
-          .columnsTemplate('1fr 1fr 1fr')
-          .rowsGap(6)
-          .columnsGap(6)
-          .margin({ top: 8 })
+          .columnsTemplate('1fr 1fr')
+          .rowsGap(8)
         }
 
         // 互动按钮
         Row() {
-          // 点赞按钮
-          Button({ type: ButtonType.Normal }) {
-            Row() {
-              Image($r('app.media.ic_like'))
-                .width(20)
-                .height(20)
-                .fillColor(this.item.isLiked ? '#FF3A30' : '#666666')
-
-              Text(this.item.likes.toString())
-                .fontColor(this.item.isLiked ? '#FF3A30' : '#666666')
-                .margin({ left: 4 })
-            }
-          }
-          .onClick(() => {
-            animateTo({
-              duration: 200,
-              curve: Curve.EaseInOut
-            }, () => {
-              this.onLike(this.item.isLiked)
+          Button(this.isLiked ? `已赞 ${this.item.likes}` : `点赞 ${this.item.likes}`)
+            .onClick(() => {
+              this.isLiked = !this.isLiked;
+              // 触发点赞事件
+              EventHub.emit('dynamic:like', this.item);
             })
-          })
-          .backgroundColor(Color.Transparent)
-          .padding(6)
-          .margin({ right: 20 })
-
-          // 评论按钮
-          Button({ type: ButtonType.Normal }) {
-            Row() {
-              Image($r('app.media.ic_comment'))
-                .width(20)
-                .height(20)
-                .fillColor('#666666')
-
-              Text('评论')
-                .fontColor('#666666')
-                .margin({ left: 4 })
-            }
-          }
-          .onClick(() => this.showCommentDialog = true)
-          .backgroundColor(Color.Transparent)
-          .padding(6)
+          Button(`评论 ${this.item.comments.length}`)
+            .margin({ left: 16 })
+            .onClick(() => {
+              this.showComments = !this.showComments;
+              // 触发显示评论事件
+              EventHub.emit('dynamic:showComments', this.item);
+            })
         }
         .margin({ top: 12 })
 
         // 评论列表
-        if (this.showComments && this.item.comments.length > 0) {
+        if (this.showComments) {
           Column() {
             ForEach(this.item.comments, (comment: CommentItem) => {
               Column() {
                 Row() {
                   Text(comment.user)
                     .fontColor('#007AFF')
-                    .fontSize(14)
-
                   Text(comment.content)
-                    .fontColor('#333333')
-                    .fontSize(14)
                     .margin({ left: 8 })
                 }
-                .width('100%')
-
                 Text(comment.time)
                   .fontSize(12)
                   .fontColor('#999999')
-                  .margin({ top: 4 })
               }
               .padding(8)
+              .backgroundColor('#F8F8F8')
+              .borderRadius(8)
+              .margin({ top: 8 })
             })
           }
           .margin({ top: 12 })
         }
 
-        // 展开/收起按钮
-        if (this.item.comments.length > 0) {
-          Text(this.showComments ? '收起评论' : `查看全部${this.item.comments.length}条评论`)
+        if (this.item.comments.length > 0 && !this.showComments) {
+          Text(`查看全部${this.item.comments.length}条评论`)
             .fontColor('#007AFF')
-            .fontSize(12)
-            .margin({ top: 8 })
-            .onClick(() => this.showComments = !this.showComments)
+            .onClick(() => {
+              this.showComments = true;
+              // 触发显示评论事件
+              EventHub.emit('dynamic:showComments', this.item);
+            })
         }
       }
       .padding(16)
       .backgroundColor('#FFFFFF')
       .borderRadius(12)
-      .shadow({ radius: 8, color: '#10000000', offsetX: 0, offsetY: 2 })
-
-      // 评论弹窗
-      if (this.showCommentDialog) {
-
-        Column() {
-          // 自定义输入提示
-          Text('发表评论')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#222222')
-            .margin({ bottom: 12 })
-
-          TextArea({
-            text: this.commentText,
-            placeholder: '请输入你的评论…',
-          })
-            .onChange((value: string) => {
-              this.commentText = value
-            })
-            .width('100%')
-            .height(120)
-            .fontSize(16)
-            .border({ width: 1, color: '#CCCCCC' })
-            .borderRadius(10)
-            .padding(10)
-            .margin({ bottom: 20 })
-
-          Row() {
-            Button('取消')
-              .width(130)
-              .height(40)
-              .backgroundColor('#DDDDDD')
-              .fontColor('#333333')
-              .borderRadius(20)
-              .onClick(() => this.showCommentDialog = false)
-
-            Button('发布')
-              .width(130)
-              .height(40)
-              .backgroundColor('#007AFF')
-              .fontColor('#ffffff')
-              .borderRadius(20)
-              .onClick(() => this.handleCommentSubmit())
-          }
-          .justifyContent(FlexAlign.SpaceBetween)
-        }
-        .padding(24)
-        .width('80%')
-        .backgroundColor('#ffffff')
-        .borderRadius(16)
-        .shadow({ radius: 12, color: '#00000022', offsetX: 0, offsetY: 4 })
-      }
-    }
-    .padding(10)
-  }
-
-  private handleCommentSubmit(): void {
-    console.log("发布评论按钮被点击");
-    if (this.commentText.trim()) {
-      const newComment = new CommentItem(
-        Date.now(),
-        '当前用户',
-        this.commentText,
-        '刚刚'
-      )
-      if (this.onComment) {
-        this.onComment(newComment) // 确保调用传入的回调
-      }
-      this.commentText = ''
-      this.showCommentDialog = false // 关闭弹窗
-      this.showComments = true   // 自动展开评论列表
+      .shadow({ radius: 6, color: '#10000000' })
     }
   }
-  // 图片路径处理函数
-  private getImagePath(imgPath: string): boolean {
-    // 判断是否为文件路径
-    if (imgPath.startsWith('file://')) {
-      return true; // 如果是文件路径，直接返回
-    } else {
-      return false; // 强制转换为字符串
-    }
-  }
-
-
 }
+
+@Entry
+@Component
+struct UserDynamic {
+  @StorageLink('dynamics') dynamics: DynamicItem[] = [];
+  @State loading: boolean = true;
+  @State errorMessage: string = '';
+  @State refreshing: boolean = false;
+
+  aboutToAppear() {
+    this.loadData();
+    // 注册事件监听
+    EventHub.on('dynamic:like', this.handleLike.bind(this));
+    EventHub.on('dynamic:showComments', this.showComments.bind(this));
+  }
+
+  aboutToDisappear() {
+    // 移除事件监听
+    EventHub.off('dynamic:like', this.handleLike.bind(this));
+    EventHub.off('dynamic:showComments', this.showComments.bind(this));
+  }
+
+  async loadData(): Promise<void> {
+    let httpRequest = http.createHttp();
+    try {
+      console.log('开始加载动态数据');
+
+      let response = await httpRequest.request(
+        "http://localhost:3000/api/dynamic/list",
+        {
+          method: http.RequestMethod.GET,
+          header: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('收到响应:', response.responseCode);
+      if (response.responseCode === 200) {
+        const responseData = JSON.parse(response.result as string) as APIDynamicResponse[];
+        console.log('解析后的数据:', responseData);
+
+        if (!Array.isArray(responseData)) {
+          console.error('返回数据不是数组:', responseData);
+          throw new Error('返回数据格式错误');
+        }
+
+        const dynamics = responseData.map(item => {
+          console.log('处理动态项:', item);
+          return new DynamicItem(
+            item.dynamic_id,
+            item.username,
+            item.content,
+            item.create_time,
+            item.like_count,
+            this.processImages(item.images || []),
+            this.processComments(item.comments || [])
+          );
+        });
+
+        console.log('处理后的动态列表:', dynamics);
+        AppStorage.setOrCreate('dynamics', dynamics);
+        this.loading = false;
+        this.refreshing = false;
+      } else {
+        console.error('请求失败，状态码:', response.responseCode);
+        let errorMessage = '请求失败';
+        switch (response.responseCode) {
+          case 404:
+            errorMessage = '接口不存在，请检查API地址';
+            break;
+          case 500:
+            errorMessage = '服务器内部错误';
+            break;
+          default:
+            errorMessage = `请求失败: ${response.responseCode}`;
+        }
+        throw new Error(errorMessage);
+      }
+    } catch (error) {
+      console.error('数据加载失败:', error);
+      this.errorMessage = error.message || '数据加载失败，下拉重试';
+      this.loading = false;
+      this.refreshing = false;
+    } finally {
+      // 释放HTTP请求
+      httpRequest.destroy();
+    }
+  }
+
+  private async handleLike(item: DynamicItem): Promise<void> {
+    let originalLikes: number = item.likes;
+    let originalIsLiked: boolean = item.isLiked;
+
+    try {
+      const index = this.dynamics.findIndex(d => d.id === item.id);
+      if (index === -1) return;
+
+      const updatedItem = new DynamicItem(
+        item.id,
+        item.username,
+        item.content,
+        item.time,
+        item.isLiked ? item.likes - 1 : item.likes + 1,
+        item.images,
+        item.comments,
+        !item.isLiked,
+        item.avatar,
+        item.showComments
+      );
+
+      this.dynamics.splice(index, 1, updatedItem);
+
+      let httpRequest = http.createHttp();
+      let response = await httpRequest.request(
+        "http://your-api-domain/api/like",
+        {
+          method: http.RequestMethod.POST,
+          header: {
+            'Content-Type': 'application/json'
+          },
+          extraData: JSON.stringify({
+            dynamic_id: item.id,
+            action: item.isLiked ? 'unlike' : 'like'
+          })
+        }
+      );
+
+      if (response.responseCode === 200) {
+        interface LikeResponse {
+          newLikeCount: number;
+          isLiked: boolean;
+        }
+        const result: LikeResponse = JSON.parse(response.result as string) as LikeResponse;
+        const finalItem = new DynamicItem(
+          item.id,
+          item.username,
+          item.content,
+          item.time,
+          result.newLikeCount,
+          item.images,
+          item.comments,
+          result.isLiked,
+          item.avatar,
+          item.showComments
+        );
+
+        this.dynamics.splice(index, 1, finalItem);
+      } else {
+        throw new Error('点赞操作失败');
+      }
+    } catch (error) {
+      console.error('点赞操作失败:', error);
+      const index = this.dynamics.findIndex(d => d.id === item.id);
+      if (index === -1) return;
+
+      const rollbackItem = new DynamicItem(
+        item.id,
+        item.username,
+        item.content,
+        item.time,
+        originalLikes,
+        item.images,
+        item.comments,
+        originalIsLiked,
+        item.avatar,
+        item.showComments
+      );
+
+      this.dynamics.splice(index, 1, rollbackItem);
+      this.errorMessage = '操作失败，请检查网络';
+      setTimeout(() => this.errorMessage = '', 2000);
+    }
+  }
+
+  private showComments(item: DynamicItem): void {
+    const index = this.dynamics.findIndex(d => d.id === item.id);
+    if (index === -1) return;
+
+    const updatedItem = new DynamicItem(
+      item.id,
+      item.username,
+      item.content,
+      item.time,
+      item.likes,
+      item.images,
+      item.comments,
+      item.isLiked,
+      item.avatar,
+      !item.showComments
+    );
+
+    this.dynamics.splice(index, 1, updatedItem);
+  }
+
+  private processImages(images: ImageItem[]): string[] {
+    console.log('开始处理图片数据:', images);
+    if (!Array.isArray(images)) {
+      console.log('返回空数组');
+      return [];
+    }
+    return images.map(img => {
+      console.log(`处理图片: image_id=${img.image_id}, suffix=${img.suffix}`);
+      if (img?.status === 1) {
+        const suffix = img.suffix.startsWith('.') ? img.suffix.slice(1) : img.suffix;
+        const imageUrl = `${BACKEND_IMAGE_BASE}${img.image_id}.${suffix}`;
+        console.log(`生成图片URL: ${imageUrl}`);
+        return imageUrl;
+      }
+      console.log('返回占位图');
+      return $r('app.media.image_pending').toString();
+    });
+  }
+
+  private processComments(comments: APICommentItem[]): CommentItem[] {
+    if (!Array.isArray(comments)) {
+      return [];
+    }
+    return comments.map(c =>
+    new CommentItem(c.comment_id, c.username, c.content, c.create_time)
+    );
+  }
+
+  build() {
+    Column() {
+      Row() {
+        Text('用户动态')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .layoutWeight(1)
+
+        Button('+ 发布')
+          .width(100)
+          .height(56)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#007AFF')
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/DynamicPublish' });
+          })
+      }
+      .padding(16)
+
+      if (this.loading) {
+        Column() {
+          LoadingProgress()
+            .width(60)
+            .height(60)
+          Text('加载中...')
+            .margin({ top: 16 })
+        }
+        .justifyContent(FlexAlign.Center)
+      } else if (this.errorMessage) {
+        Column() {
+          Image($r('app.media.ic_error'))
+            .width(120)
+            .height(120)
+          Text(this.errorMessage)
+            .margin({ top: 16 })
+          Button('重试')
+            .margin({ top: 16 })
+            .onClick(() => this.loadData())
+        }
+        .justifyContent(FlexAlign.Center)
+      } else {
+        Refresh({ refreshing: $$this.refreshing }) {
+          List({ space: 12 }) {
+            ForEach(this.dynamics, (item: DynamicItem) => {
+              ListItem() {
+                DynamicItemComponent({ item: item })
+              }
+            })
+          }
+        }
+        .onRefreshing(() => {
+          this.refreshing = true;
+          this.loadData();
+        })
+      }
+    }
+    .height('100%')
+    .backgroundColor('#F5F5F5')
+  }
+}
+
+export default UserDynamic;
