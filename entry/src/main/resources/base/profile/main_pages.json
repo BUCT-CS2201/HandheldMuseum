@@ -7,6 +7,6 @@
     "pages/NoticeDetail",
     "pages/MuseumInfo",
     "pages/MuseumDetail",
-    "pages/MuseumRanking"
+    "pages/DynamicPublish"
   ]
 }

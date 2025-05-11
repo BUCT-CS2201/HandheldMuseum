@@ -1,8 +1,14 @@
 // pages/DynamicPublish.ets
 import router from '@ohos.router';
 import picker from '@ohos.file.picker';
-import { DynamicItem } from './UserDynamic';
 import fileio from '@ohos.fileio';
+import http from '@ohos.net.http';
+import { DynamicItem, UploadImageItem } from '../common/types/DynamicTypes';
+import fs from '@ohos.file.fs';
+
+// 修改路径为 HarmonyOS 标准缓存路径
+const UPLOAD_DIR = 'file:///data/user/0/com.example.app/cache/uploads/';
+
 @Entry
 @Component
 struct DynamicPublish {
@@ -11,8 +17,12 @@ struct DynamicPublish {
   @State publishLoading: boolean = false;
   @State showPlaceholder: boolean = true;
   @State hasFocus: boolean = false;
+  @State errorMessage: string = '';
+  @State showError: boolean = false;
+
   // 获取应用上下文
   private context = getContext(this);
+
   build() {
     Column() {
       // 顶部工具栏
@@ -42,6 +52,17 @@ struct DynamicPublish {
 
         // 图片预览区
         this.ImagePreview()
+
+        // 错误提示
+        if (this.showError) {
+          Text(this.errorMessage)
+            .fontSize(14)
+            .fontColor('#FF3B30')
+            .margin({ top: 8 })
+            .onClick(() => {
+              this.showError = false;
+            })
+        }
       }
       .layoutWeight(1)
 
@@ -57,7 +78,7 @@ struct DynamicPublish {
     Row() {
       Button('取消')
         .fontSize(16)
-        .fontColor('#ff1f1414')
+        .fontColor('#333333')
         .backgroundColor(Color.Transparent)
         .margin({ left: 16 })
         .onClick(() => router.back())
@@ -70,10 +91,10 @@ struct DynamicPublish {
 
       Button('发布')
         .fontSize(16)
-        .fontColor(this.canPublish ? '#007AFF' : '#ff211919')
+        .fontColor(this.canPublish ? '#007AFF' : '#999999')
         .margin({ right: 16 })
         .backgroundColor(Color.Transparent)
-        .enabled(!this.publishLoading) // 禁用按钮防止重复提交
+        .enabled(this.canPublish && !this.publishLoading)
         .onClick(() => this.publishDynamic())
     }
     .height(56)
@@ -92,9 +113,6 @@ struct DynamicPublish {
               .aspectRatio(1)
               .objectFit(ImageFit.Cover)
               .borderRadius(8)
-              .overlay(
-
-              )
 
             Button() {
               Image($r('app.media.ic_close'))
@@ -105,7 +123,7 @@ struct DynamicPublish {
             .height(24)
             .borderRadius(12)
             .backgroundColor('#99000000')
-            .position({ x: '99%', y: '5%' })
+            .position({ x: '95%', y: '5%' })
             .onClick(() => {
               this.selectedImages.splice(index, 1)
               this.selectedImages = [...this.selectedImages]
@@ -156,51 +174,132 @@ struct DynamicPublish {
     return this.content.trim().length > 0 || this.selectedImages.length > 0
   }
 
-  private pickImages() {
-    const options = new picker.PhotoSelectOptions()
-    options.maxSelectNumber = 9 - this.selectedImages.length
-    options.MIMEType = picker.PhotoViewMIMETypes.IMAGE_TYPE
+  private async pickImages() {
+    try {
+      const options = new picker.PhotoSelectOptions()
+      options.maxSelectNumber = 9 - this.selectedImages.length
+      options.MIMEType = picker.PhotoViewMIMETypes.IMAGE_TYPE
 
-    new picker.PhotoViewPicker().select(options)
-      .then(selected => {
-        this.selectedImages = [...this.selectedImages, ...selected.photoUris]
-      })
+      const photoPicker = new picker.PhotoViewPicker()
+      const result = await photoPicker.select(options)
+      
+      if (result && result.photoUris && Array.isArray(result.photoUris)) {
+        // 确保不超过9张图片
+        const remainingSlots = 9 - this.selectedImages.length
+        const newImages = result.photoUris.slice(0, remainingSlots)
+        this.selectedImages = [...this.selectedImages, ...newImages]
+      } else {
+        console.warn('未选择图片或选择结果格式不正确')
+      }
+    } catch (error) {
+      console.error('图片选择失败:', error)
+      this.showError = true
+      this.errorMessage = '图片选择失败，请重试'
+    }
   }
 
+  private async publishDynamic() {
+    if (!this.canPublish) {
+      this.showError = true;
+      this.errorMessage = '请输入内容或选择图片';
+      return;
+    }
 
-  private publishDynamic() {
-    console.log('开始发布，已选图片数量:', this.selectedImages.length)
+    this.publishLoading = true;
+    try {
+      // 1. 上传图片到本地缓存目录
+      const savedImages = await this.saveImagesToLocal();
+      if (savedImages.length === 0 && this.selectedImages.length > 0) {
+        throw new Error('图片保存失败');
+      }
 
-    // 打印选中的图片URI
-    this.selectedImages.forEach((uri, index) => {
-      console.log(`图片${index + 1}:`, uri)
-    })
+      // 2. 创建动态对象
+      const newDynamic = new DynamicItem(
+        Date.now(),
+        await this.getCurrentUsername(),
+        this.content,
+        new Date().toISOString(),
+        0,
+        savedImages,
+        [],
+        false,
+        await this.getCurrentUserAvatar(),
+        false
+      );
 
-    // 创建动态对象（暂时保持空数组）
-    const newDynamic = new DynamicItem(
-      Date.now(),
-      $r('app.media.default_avatar'),
-      '当前用户',
-      this.content,
-      new Date().toLocaleString(),
-      0,
-      this.selectedImages, // ✅ 直接使用 string[]
-      false,
-      []
-    )
+      // 3. 调用API提交到服务器
+      const success = await this.submitToServer(newDynamic);
+      if (!success) {
+        throw new Error('提交服务器失败');
+      }
 
-    // 获取现有数据
-    const currentDynamics = AppStorage.get<DynamicItem[]>('dynamics') || []
-    console.log('存储前数据：', currentDynamics)
+      // 4. 更新本地存储
+      const currentDynamics = AppStorage.get<DynamicItem[]>('dynamics') || [];
+      AppStorage.setOrCreate('dynamics', [newDynamic, ...currentDynamics]);
 
-    // 更新存储
-    AppStorage.setOrCreate('dynamics', [newDynamic, ...currentDynamics])
+      router.back();
+    } catch (error) {
+      console.error('发布失败:', error);
+      this.showError = true;
+      this.errorMessage = error.message || '发布失败，请重试';
+    } finally {
+      this.publishLoading = false;
+    }
+  }
 
-    // 验证存储结果
-    const updated = AppStorage.get<DynamicItem[]>('dynamics')
-    console.log('存储后数据：', updated)
+  private async saveImagesToLocal(): Promise<string[]> {
+    const savedPaths: string[] = []
+    for (const uri of this.selectedImages) {
+      try {
+        const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`
+        const destPath = `${UPLOAD_DIR}${fileName}`
 
-    router.back()
+        await fs.copyFile(uri, destPath)
+        savedPaths.push(destPath)
+      } catch (error) {
+        console.error('图片保存失败:', error)
+      }
+    }
+    return savedPaths
+  }
 
+  private async getCurrentUsername(): Promise<string> {
+    // 从AppStorage获取当前用户信息
+    return AppStorage.get<string>('currentUsername') || '当前用户'
+  }
+
+  private async getCurrentUserAvatar(): Promise<Resource> {
+    // 从AppStorage获取用户头像
+    return AppStorage.get<Resource>('currentUserAvatar') || $r('app.media.default_avatar')
+  }
+
+  private async submitToServer(dynamic: DynamicItem): Promise<boolean> {
+    try {
+      let httpRequest = http.createHttp();
+      let response = await httpRequest.request(
+        "http://localhost:3000/api/dynamic/publish",
+        {
+          method: http.RequestMethod.POST,
+          header: {
+            'Content-Type': 'application/json'
+          },
+          extraData: JSON.stringify({
+            content: dynamic.content,
+            images: dynamic.images.map(uri => {
+              const fileName = uri.split('/').pop();
+              const uploadImage: UploadImageItem = {
+                image_id: fileName?.split('.')[0] || '',
+                suffix: fileName?.split('.')[1] || 'jpg'
+              };
+              return uploadImage;
+            })
+          })
+        }
+      );
+      return response.responseCode === 200;
+    } catch (error) {
+      console.error('API请求失败:', error)
+      return false
+    }
   }
 }
