@@ -6,6 +6,7 @@
     "pages/AntiqueDetail",
     "pages/NoticeDetail",
     "pages/MuseumInfo",
-    "pages/MuseumDetail"
+    "pages/MuseumDetail",
+    "pages/MuseumRanking"
   ]
 }

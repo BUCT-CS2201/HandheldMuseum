@@ -101,4 +101,36 @@ router.get('/relics/:id', (req, res) => {
         })
 })
 
+// 获取博物馆排行榜
+router.get('/ranking', (req, res) => {
+    const sql = `
+        SELECT 
+            m.museum_id,
+            m.museum_name,
+            m.address,
+            mi.img_url as museum_image,
+            COUNT(cr.relic_id) as relic_count
+        FROM 
+            museum m
+        LEFT JOIN 
+            cultural_relic cr ON m.museum_id = cr.museum_id
+        LEFT JOIN
+            museum_image mi ON m.museum_id = mi.museum_id
+        GROUP BY 
+            m.museum_id, m.museum_name, m.address, mi.img_url
+        ORDER BY 
+            relic_count DESC, m.museum_id ASC
+    `;
+
+    mysqlService.query(sql)
+        .then(results => {
+            console.log('博物馆排行榜数据:', JSON.stringify(results));
+            res.json(results);
+        })
+        .catch(err => {
+            console.error('获取博物馆排行榜失败:', err);
+            res.status(500).json({ error: '获取博物馆排行榜失败' });
+        });
+});
+
 module.exports = router
