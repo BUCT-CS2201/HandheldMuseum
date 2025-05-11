@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const mysqlService = require('../services/mysqlService');
+
+function md5Encrypt(password) {
+    return crypto.createHash('md5').update(password).digest('hex');
+}
 
 // 用户登录
 router.post('/login', async (req, res) => {
@@ -13,9 +18,10 @@ router.post('/login', async (req, res) => {
                 message: '手机号和密码不能为空'
             });
         }
+        // 对密码进行 MD5 加密
+        const encryptedPassword = md5Encrypt(password);
+        const result = await mysqlService.userLogin(phone_number, encryptedPassword);
 
-        const result = await mysqlService.userLogin(phone_number, password);
-        
         if (result) {
             res.json({
                 code: 0,

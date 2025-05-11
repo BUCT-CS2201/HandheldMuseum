@@ -49,7 +49,7 @@ struct UserProfile {
 
       let httpRequest = http.createHttp();
       httpRequest.request(
-        `http://localhost:3000/api/user/${userId}`,
+        `http://localhost:3000/api/user/info/${userId}`,
         {
           method: http.RequestMethod.GET,
         },

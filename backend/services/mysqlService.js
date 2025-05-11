@@ -40,5 +40,36 @@ module.exports = {
         } finally {
             connection.release() // 无论成功与否都释放连接
         }
+    },
+
+    // 用户相关方法
+    userLogin: async (phone_number, password) => {
+        const sql = 'SELECT * FROM user WHERE phone_number = ? AND password = ? AND account_status = 1'
+        const results = await module.exports.query(sql, [phone_number, password])
+        return results[0] || null
+    },
+
+    checkPhoneExists: async (phone_number) => {
+        const sql = 'SELECT COUNT(*) as count FROM user WHERE phone_number = ?'
+        const results = await module.exports.query(sql, [phone_number])
+        return results[0].count > 0
+    },
+
+    userRegister: async (phone_number, password, name, id_number) => {
+        const sql = 'INSERT INTO user (phone_number, password, name, id_number, account_status, comment_status, role_type) VALUES (?, ?, ?, ?, 1, 1, 0)'
+        const result = await module.exports.query(sql, [phone_number, password, name, id_number])
+        return result
+    },
+
+    getUserInfo: async (userId) => {
+        const sql = 'SELECT user_id, phone_number, name, description, gender, age, address, wechat, qq, account_status, comment_status, role_type, create_time, update_time FROM user WHERE user_id = ?'
+        const results = await module.exports.query(sql, [userId])
+        return results[0] || null
+    },
+
+    updateUserInfo: async (userId, { name, phone_number, id_number, gender, age, description, address, wechat, qq }) => {
+        const sql = 'UPDATE user SET name = ?, phone_number = ?, id_number = ?, gender = ?, age = ?, description = ?, address = ?, wechat = ?, qq = ? WHERE user_id = ?'
+        const result = await module.exports.query(sql, [name, phone_number, id_number, gender, age, description, address, wechat, qq, userId])
+        return result.affectedRows > 0
     }
 }
