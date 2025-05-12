@@ -108,7 +108,6 @@ struct Login {
 
               if (success) {
                 console.log("success");
-                // router.pushUrl({ url: 'pages/Index' });
                 this.getUIContext().getRouter().back();
               }
               else {

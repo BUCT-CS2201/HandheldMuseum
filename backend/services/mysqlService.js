@@ -57,8 +57,8 @@ module.exports = {
 
     userRegister: async (phone_number, password, name, id_number) => {
         const sql = 'INSERT INTO user (phone_number, password, name, id_number, account_status, comment_status, role_type) VALUES (?, ?, ?, ?, 1, 1, 0)'
-        const result = await module.exports.query(sql, [phone_number, password, name, id_number])
-        return result
+        const results = await module.exports.query(sql, [phone_number, password, name, id_number])
+        return results
     },
 
     getUserInfo: async (userId) => {
