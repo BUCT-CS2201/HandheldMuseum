@@ -103,7 +103,7 @@ export default struct Personal {
       } else if (this.userInfo) {
         // 顶部个人信息卡片
         Row() {
-          Image('/common/images/default_avatar.png')
+          Image($r("app.media.default_avatar"))
             .width(60)
             .height(60)
             .borderRadius(30)

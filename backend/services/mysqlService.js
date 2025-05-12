@@ -67,9 +67,9 @@ module.exports = {
         return results[0] || null
     },
 
-    updateUserInfo: async (userId, { name, phone_number, id_number, gender, age, description, address, wechat, qq }) => {
-        const sql = 'UPDATE user SET name = ?, phone_number = ?, id_number = ?, gender = ?, age = ?, description = ?, address = ?, wechat = ?, qq = ? WHERE user_id = ?'
-        const result = await module.exports.query(sql, [name, phone_number, id_number, gender, age, description, address, wechat, qq, userId])
+    updateUserInfo: async (userId, { name, phone_number, gender, age, description, address, wechat, qq }) => {
+        const sql = 'UPDATE user SET name = ?, phone_number = ?, gender = ?, age = ?, description = ?, address = ?, wechat = ?, qq = ? WHERE user_id = ?'
+        const result = await module.exports.query(sql, [name, phone_number, gender, age, description, address, wechat, qq, userId])
         return result.affectedRows > 0
     }
 }
