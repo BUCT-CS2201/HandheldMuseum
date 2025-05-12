@@ -109,6 +109,7 @@ struct UserProfile {
               this.saveUserInfo();
             } else {
               this.isEditing = true;
+              console.info('进入编辑模式, isEditing: ', this.isEditing);
             }
           })
       }
@@ -122,7 +123,7 @@ struct UserProfile {
           Column() {
             // 头像
             Stack({ alignContent: Alignment.BottomEnd }) {
-              Image('/common/images/default_avatar.png')
+              Image($r("app.media.default_avatar"))
                 .width(100)
                 .height(100)
                 .borderRadius(50)
@@ -201,10 +202,14 @@ struct UserProfile {
         .fontColor('#666666')
         .width(80)
       if (editable) {
-        TextInput({ text: value })
+        TextInput({ text: value, placeholder: `请输入${label}` })
           .fontSize(16)
-          .backgroundColor(Color.Transparent)
+          .backgroundColor('#F5F5F5')
           .layoutWeight(1)
+          .height(40)
+          .borderRadius(4)
+          .padding({ left: 8, right: 8 })
+          .margin({ left: 8 })
           .onChange((newValue: string) => {
             if (!this.userInfo) return;
             // 更新对应的用户信息字段
@@ -226,6 +231,12 @@ struct UserProfile {
                 break;
               case '个人简介':
                 this.userInfo.description = newValue;
+                break;
+              case '用户名':
+                this.userInfo.name = newValue;
+                break;
+              case '手机号':
+                this.userInfo.phone_number = newValue;
                 break;
             }
           })
@@ -250,13 +261,15 @@ struct UserProfile {
     try {
       let httpRequest = http.createHttp();
       httpRequest.request(
-        `http://localhost:3000/api/user/${this.userInfo.user_id}`,
+        `http://localhost:3000/api/user/info/${this.userInfo.user_id}`,
         {
           method: http.RequestMethod.PUT,
           header: {
             'Content-Type': 'application/json'
           },
           extraData: JSON.stringify({
+            name: this.userInfo.name,
+            phone_number: this.userInfo.phone_number,
             gender: this.userInfo.gender,
             age: this.userInfo.age,
             address: this.userInfo.address,
@@ -269,31 +282,61 @@ struct UserProfile {
           if (!err) {
             try {
               let result: ApiResponse;
+              console.info('服务器响应:', data.result); // 添加日志输出
+              
               if (typeof data.result === 'string') {
-                result = JSON.parse(data.result) as ApiResponse;
-              } else {
+                try {
+                  result = JSON.parse(data.result) as ApiResponse;
+                } catch (parseError) {
+                  console.error('JSON解析失败，原始数据:', data.result);
+                  throw new Error('服务器返回的数据格式不正确');
+                }
+              } else if (data.result) {
                 result = data.result as ApiResponse;
+              } else {
+                throw new Error('响应数据为空');
               }
+
               if (result.code === 0) {
                 this.isEditing = false;
                 this.message = '保存成功';
+                console.info('退出编辑模式, isEditing: ', this.isEditing);
+                // 重新加载用户信息以更新界面
+                this.loadUserInfo();
+                // 使用try-catch包装router.back()调用
+                try {
+                  router.back();
+                } catch (routerError) {
+                  // 在预览器中，这个错误是预期的，可以忽略
+                  if (routerError.message?.includes('UI execution context not found')) {
+                    console.info('在预览器环境中，忽略返回错误');
+                  } else {
+                    console.error('返回上一页失败:', routerError);
+                  }
+                  // 确保界面状态正确
+                  this.isEditing = false;
+                }
               } else {
                 this.message = result.message || '保存失败';
               }
             } catch (e) {
               this.message = '数据解析失败';
-              console.error('解析异常:', JSON.stringify(e));
+              console.error('解析异常:', e instanceof Error ? e.message : '未知错误');
+              if (e instanceof Error) {
+                console.error('错误详情:', e.stack);
+              }
             }
           } else {
             this.message = '保存失败';
-            console.error(JSON.stringify(err));
+            console.error('请求错误:', err.message || '未知错误');
+            console.error('错误详情:', err);
           }
           httpRequest.destroy();
           this.isLoading = false;
         }
       );
     } catch (error) {
-      console.error('保存失败:', error);
+      console.error('保存失败:', error instanceof Error ? error.message : '未知错误');
       this.message = '保存失败';
       this.isLoading = false;
     }

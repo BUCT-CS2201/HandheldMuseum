@@ -270,7 +270,7 @@ struct DynamicPublish {
 
   private async getCurrentUserAvatar(): Promise<Resource> {
     // 从AppStorage获取用户头像
-    return AppStorage.get<Resource>('currentUserAvatar') || $r('app.media.default_avatar')
+    return AppStorage.get<Resource>('currentUserAvatar') || $r("app.media.default_avatar")
   }
 
   private async submitToServer(dynamic: DynamicItem): Promise<boolean> {
