@@ -68,7 +68,7 @@ export class DynamicItem {
     images: string[],
     comments: CommentItem[] = [],
     isLiked: boolean = false,
-    avatar: Resource = $r('app.media.default_avatar'),
+    avatar: Resource = $r("app.media.default_avatar"),
     showComments: boolean = false
   ) {
     this.id = id;

@@ -8,37 +8,62 @@ import EventHub from '../common/utils/EventHub';
 const LOCAL_IMAGE_BASE = 'file:///data/storage/el2/base/cache/uploads/';
 const BACKEND_IMAGE_BASE = 'http://localhost:3000/uploads/';
 
+// 在文件开头的import语句后添加接口定义
+interface LikeResponse {
+  newLikeCount: number;
+  isLiked: boolean;
+}
+
 @Component
 struct DynamicItemComponent {
   @Prop item: DynamicItem;
   @State isLiked: boolean = false;
   @State showComments: boolean = false;
+  @State showCommentDialog: boolean = false;
+  @State commentText: string = '';
+  @State showFullImage: boolean = false;
+  @State selectedImage: string = '';
 
   build() {
     Column() {
+      // 卡片容器
       Column() {
         // 用户信息
         Row() {
           Image(this.item.avatar)
-            .width(48)
-            .height(48)
-            .borderRadius(24)
-            .margin({ right: 12 })
+            .width(56)
+            .height(56)
+            .borderRadius(28)
+            .margin({ right: 16 })
+            .shadow({ radius: 4, color: '#20000000', offsetX: 0, offsetY: 2 })
+
           Column() {
             Text(this.item.username)
-              .fontSize(16)
+              .fontSize(18)
+              .fontColor('#333333')
+              .fontWeight(FontWeight.Medium)
+              .margin({ bottom: 4 })
+
             Text(this.item.time)
-              .fontSize(12)
+              .fontSize(14)
               .fontColor('#999999')
           }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
         }
+        .width('100%')
+        .padding({ top: 16, bottom: 16 })
 
         // 动态内容
         Text(this.item.content)
-          .margin({ top: 12, bottom: 12 })
+          .fontSize(16)
+          .fontColor('#333333')
+          .lineHeight(24)
+          .margin({ bottom: 16 })
+          .width('100%')
 
         // 图片展示
-        if (this.item.images.length > 0) {
+        if (this.item.images && this.item.images.length > 0) {
           Grid() {
             ForEach(this.item.images, (imgPath: string) => {
               GridItem() {
@@ -46,74 +71,155 @@ struct DynamicItemComponent {
                   .width('100%')
                   .aspectRatio(1)
                   .objectFit(ImageFit.Cover)
-                  .borderRadius(8)
-                  .onError(() => {
-                    console.error('图片加载失败:', imgPath);
+                  .borderRadius(12)
+                  .onClick(() => {
+                    this.selectedImage = imgPath;
+                    this.showFullImage = true;
                   })
               }
             })
           }
-          .columnsTemplate('1fr 1fr')
+          .columnsTemplate('1fr 1fr 1fr')
           .rowsGap(8)
+          .columnsGap(8)
+          .margin({ bottom: 16 })
         }
 
         // 互动按钮
         Row() {
-          Button(this.isLiked ? `已赞 ${this.item.likes}` : `点赞 ${this.item.likes}`)
-            .onClick(() => {
-              this.isLiked = !this.isLiked;
-              // 触发点赞事件
-              EventHub.emit('dynamic:like', this.item);
-            })
-          Button(`评论 ${this.item.comments.length}`)
-            .margin({ left: 16 })
-            .onClick(() => {
-              this.showComments = !this.showComments;
-              // 触发显示评论事件
-              EventHub.emit('dynamic:showComments', this.item);
-            })
+          // 点赞按钮
+          Button({ type: ButtonType.Normal }) {
+            Row() {
+              Image($r('app.media.ic_like'))
+                .width(24)
+                .height(24)
+                .fillColor(this.isLiked ? '#FF3A30' : '#666666')
+                .margin({ right: 6 })
+
+              Text(this.item.likes.toString())
+                .fontSize(16)
+                .fontColor(this.isLiked ? '#FF3A30' : '#666666')
+            }
+          }
+          .onClick(() => {
+            this.isLiked = !this.isLiked;
+            EventHub.emit('dynamic:like', this.item);
+          })
+          .backgroundColor(Color.Transparent)
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .borderRadius(20)
+          .margin({ right: 24 })
+
+          // 评论按钮
+          Button({ type: ButtonType.Normal }) {
+            Row() {
+              Image($r('app.media.ic_comment'))
+                .width(24)
+                .height(24)
+                .fillColor('#666666')
+                .margin({ right: 6 })
+
+              Text(`评论 ${this.item.comments.length}`)
+                .fontSize(16)
+                .fontColor('#666666')
+            }
+          }
+          .onClick(() => {
+            this.showComments = !this.showComments;
+            EventHub.emit('dynamic:showComments', this.item);
+          })
+          .backgroundColor(Color.Transparent)
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .borderRadius(20)
         }
-        .margin({ top: 12 })
+        .margin({ bottom: 16 })
 
         // 评论列表
-        if (this.showComments) {
+        if (this.showComments && this.item.comments.length > 0) {
           Column() {
             ForEach(this.item.comments, (comment: CommentItem) => {
               Column() {
                 Row() {
                   Text(comment.user)
                     .fontColor('#007AFF')
+                    .fontSize(15)
+                    .fontWeight(FontWeight.Medium)
+
                   Text(comment.content)
+                    .fontColor('#333333')
+                    .fontSize(15)
                     .margin({ left: 8 })
+                    .layoutWeight(1)
                 }
+                .width('100%')
+
                 Text(comment.time)
-                  .fontSize(12)
+                  .fontSize(13)
                   .fontColor('#999999')
+                  .margin({ top: 4 })
               }
-              .padding(8)
+              .padding({ left: 16, right: 16, top: 12, bottom: 12 })
               .backgroundColor('#F8F8F8')
               .borderRadius(8)
-              .margin({ top: 8 })
+              .margin({ bottom: 8 })
             })
           }
-          .margin({ top: 12 })
+          .margin({ top: 8 })
         }
 
+        // 展开/收起按钮
         if (this.item.comments.length > 0 && !this.showComments) {
           Text(`查看全部${this.item.comments.length}条评论`)
             .fontColor('#007AFF')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .margin({ top: 8, bottom: 8 })
             .onClick(() => {
               this.showComments = true;
-              // 触发显示评论事件
               EventHub.emit('dynamic:showComments', this.item);
             })
         }
       }
-      .padding(16)
+      .padding({ left: 20, right: 20 })
       .backgroundColor('#FFFFFF')
-      .borderRadius(12)
-      .shadow({ radius: 6, color: '#10000000' })
+      .borderRadius(16)
+      .shadow({ radius: 12, color: '#10000000', offsetX: 0, offsetY: 4 })
+
+      // 全屏图片预览
+      if (this.showFullImage) {
+        Stack({ alignContent: Alignment.Center }) {
+          // 半透明黑色遮罩
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('#000000')
+            .opacity(0.9)
+            .onClick(() => {
+              this.showFullImage = false;
+            })
+            .zIndex(9999)
+
+          // 图片展示容器
+          Swiper() {
+            ForEach(this.item.images, (imgPath: string) => {
+              Image(imgPath)
+                .width('100%')
+                .height('100%')
+                .objectFit(ImageFit.Contain)
+                .onClick(() => {
+                  this.showFullImage = false;
+                })
+            })
+          }
+          .indicator(false)
+          .loop(false)
+          .width('100%')
+          .height('80%')
+          .zIndex(10000)
+        }
+      }
     }
+    .padding(12)
   }
 }
 
@@ -214,6 +320,7 @@ struct UserDynamic {
       const index = this.dynamics.findIndex(d => d.id === item.id);
       if (index === -1) return;
 
+      // 先更新UI状态
       const updatedItem = new DynamicItem(
         item.id,
         item.username,
@@ -229,9 +336,15 @@ struct UserDynamic {
 
       this.dynamics.splice(index, 1, updatedItem);
 
+      // 调用后端API
       let httpRequest = http.createHttp();
+      console.log('发送点赞请求:', {
+        dynamic_id: item.id,
+        action: item.isLiked ? 'unlike' : 'like'
+      });
+
       let response = await httpRequest.request(
-        "http://your-api-domain/api/like",
+        "http://localhost:3000/api/dynamic/like",
         {
           method: http.RequestMethod.POST,
           header: {
@@ -244,11 +357,12 @@ struct UserDynamic {
         }
       );
 
+      console.log('收到点赞响应:', {
+        statusCode: response.responseCode,
+        responseBody: response.result
+      });
+
       if (response.responseCode === 200) {
-        interface LikeResponse {
-          newLikeCount: number;
-          isLiked: boolean;
-        }
         const result: LikeResponse = JSON.parse(response.result as string) as LikeResponse;
         const finalItem = new DynamicItem(
           item.id,
@@ -265,13 +379,14 @@ struct UserDynamic {
 
         this.dynamics.splice(index, 1, finalItem);
       } else {
-        throw new Error('点赞操作失败');
+        throw new Error(`点赞操作失败: ${response.responseCode} - ${response.result}`);
       }
     } catch (error) {
       console.error('点赞操作失败:', error);
       const index = this.dynamics.findIndex(d => d.id === item.id);
       if (index === -1) return;
 
+      // 发生错误时回滚UI状态
       const rollbackItem = new DynamicItem(
         item.id,
         item.username,
@@ -286,7 +401,7 @@ struct UserDynamic {
       );
 
       this.dynamics.splice(index, 1, rollbackItem);
-      this.errorMessage = '操作失败，请检查网络';
+      this.errorMessage = `操作失败: ${error.message}`;
       setTimeout(() => this.errorMessage = '', 2000);
     }
   }
@@ -341,6 +456,7 @@ struct UserDynamic {
 
   build() {
     Column() {
+      // 标题栏
       Row() {
         Text('用户动态')
           .fontSize(20)
@@ -350,13 +466,19 @@ struct UserDynamic {
         Button('+ 发布')
           .width(100)
           .height(56)
+          .fontSize(18)
           .fontColor('#FFFFFF')
           .backgroundColor('#007AFF')
+          .fontWeight(FontWeight.Bold)
+          .borderRadius(28)
           .onClick(() => {
             router.pushUrl({ url: 'pages/DynamicPublish' });
           })
       }
       .padding(16)
+      .width('100%')
+      .backgroundColor('#FFFFFF')
+      .shadow({ radius: 4, color: '#10000000', offsetX: 0, offsetY: 2 })
 
       if (this.loading) {
         Column() {
@@ -365,8 +487,11 @@ struct UserDynamic {
             .height(60)
           Text('加载中...')
             .margin({ top: 16 })
+            .fontSize(16)
+            .fontColor('#666666')
         }
         .justifyContent(FlexAlign.Center)
+        .layoutWeight(1)
       } else if (this.errorMessage) {
         Column() {
           Image($r('app.media.ic_error'))
@@ -374,11 +499,20 @@ struct UserDynamic {
             .height(120)
           Text(this.errorMessage)
             .margin({ top: 16 })
+            .fontSize(16)
+            .fontColor('#666666')
           Button('重试')
             .margin({ top: 16 })
+            .width(120)
+            .height(40)
+            .fontSize(16)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#007AFF')
+            .borderRadius(20)
             .onClick(() => this.loadData())
         }
         .justifyContent(FlexAlign.Center)
+        .layoutWeight(1)
       } else {
         Refresh({ refreshing: $$this.refreshing }) {
           List({ space: 12 }) {
@@ -388,6 +522,8 @@ struct UserDynamic {
               }
             })
           }
+          .width('100%')
+          .layoutWeight(1)
         }
         .onRefreshing(() => {
           this.refreshing = true;

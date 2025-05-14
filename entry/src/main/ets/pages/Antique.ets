@@ -205,6 +205,13 @@ fetchData(): void {
               .justifyContent(FlexAlign.SpaceBetween)
               .padding({ left: 8, right: 8 })
             }
+            .width('48%')  // 宽度略小于 50%，留出间距
+            .padding({
+              left: 12,
+              right: 12,
+              top: 0,
+              bottom: 12
+            })
             .width('48%')
             .padding(10)
             .backgroundColor('#FFFFFF')
@@ -222,9 +229,10 @@ fetchData(): void {
         }
         .width('100%')
       }
-      .margin({ bottom: 30 })
+      .flexGrow(1)
     }
-    .align(Alignment.TopStart)
+    .width('100%')
+    .height('100%')
     .backgroundColor('#F7F8FA')
   }
 }

@@ -37,43 +37,6 @@ const upload = multer({
   }
 })
 
-// 图片上传接口
-router.post('/upload/image', upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: '请选择要上传的图片' })
-    }
-
-    const { user_id } = req.body
-    if (!user_id) {
-      return res.status(400).json({ error: '缺少用户ID' })
-    }
-
-    const suffix = path.extname(req.file.originalname).substring(1)
-
-    // 插入图片记录
-    const insertSql = `
-      INSERT INTO user_image
-      (user_id, image_suffix, status)
-      VALUES (?, ?, 0)
-    `
-    const result = await mysqlService.query(insertSql, [user_id, suffix])
-
-    // 重命名文件为 image_id.suffix
-    const newFilename = `${result.insertId}.${suffix}`
-    const newPath = path.join(uploadDir, newFilename)
-    fs.renameSync(req.file.path, newPath)
-
-    res.json({
-      image_id: result.insertId,
-      filename: newFilename,
-      status: 0 // 初始状态为审核中
-    })
-  } catch (err) {
-    console.error('图片上传失败:', err)
-    res.status(500).json({ error: '图片上传失败' })
-  }
-})
 
 // 发布动态
 router.post('/publish', async (req, res) => {
@@ -239,6 +202,110 @@ router.get('/image/:imageId', async (req, res) => {
   } catch (err) {
     console.error('获取图片失败:', err)
     res.status(500).json({ error: '获取图片失败' })
+  }
+})
+
+// 点赞/取消点赞接口
+router.post('/like', async (req, res) => {
+  console.log('收到点赞请求:', req.body);
+  const { dynamic_id, action } = req.body;
+
+  if (!dynamic_id || !action) {
+    console.log('参数不完整:', { dynamic_id, action });
+    return res.status(400).json({ error: '参数不完整' });
+  }
+
+  try {
+    // 首先检查动态是否存在
+    const checkSql = `
+      SELECT comment_id, like_count
+      FROM relic_comment
+      WHERE comment_id = ? AND is_deleted = 0
+    `;
+    console.log('检查动态是否存在:', checkSql, [dynamic_id]);
+    const [existingComment] = await mysqlService.query(checkSql, [dynamic_id]);
+
+    if (!existingComment) {
+      console.log('动态不存在:', dynamic_id);
+      return res.status(404).json({ error: '动态不存在' });
+    }
+
+    // 根据action决定是增加还是减少点赞数
+    const updateSql = `
+      UPDATE relic_comment
+      SET like_count = like_count ${action === 'like' ? '+ 1' : '- 1'}
+      WHERE comment_id = ? AND is_deleted = 0
+    `;
+    console.log('执行SQL:', updateSql, [dynamic_id]);
+
+    const updateResult = await mysqlService.query(updateSql, [dynamic_id]);
+    console.log('更新结果:', updateResult);
+
+    if (updateResult.affectedRows === 0) {
+      console.log('更新失败，没有记录被修改');
+      return res.status(500).json({ error: '点赞操作失败' });
+    }
+
+    // 获取更新后的点赞数
+    const getCountSql = `
+      SELECT like_count
+      FROM relic_comment
+      WHERE comment_id = ?
+    `;
+    console.log('执行SQL:', getCountSql, [dynamic_id]);
+    const [result] = await mysqlService.query(getCountSql, [dynamic_id]);
+    console.log('查询结果:', result);
+
+    if (!result) {
+      console.log('获取更新后的点赞数失败');
+      return res.status(500).json({ error: '获取点赞数失败' });
+    }
+
+    res.json({
+      newLikeCount: result.like_count,
+      isLiked: action === 'like'
+    });
+  } catch (err) {
+    console.error('点赞操作失败:', err);
+    res.status(500).json({ error: '点赞操作失败' });
+  }
+});
+
+// 图片上传接口
+router.post('/upload/image', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '请选择要上传的图片' })
+    }
+
+    const { user_id } = req.body
+    if (!user_id) {
+      return res.status(400).json({ error: '缺少用户ID' })
+    }
+
+    const suffix = path.extname(req.file.originalname).substring(1)
+
+    // 插入图片记录
+    const insertSql = `
+      INSERT INTO user_image
+      (user_id, image_suffix, status)
+      VALUES (?, ?, 0)
+    `
+    const result = await mysqlService.query(insertSql, [user_id, suffix])
+
+    // 重命名文件为 image_id.suffix
+    const newFilename = `${result.insertId}.${suffix}`
+    const newPath = path.join(uploadDir, newFilename)
+    fs.renameSync(req.file.path, newPath)
+
+    res.json({
+      image_id: result.insertId,
+      filename: newFilename,
+      status: 0 // 初始状态为审核中
+    })
+  } catch (err) {
+    console.error('图片上传失败:', err)
+    res.status(500).json({ error: '图片上传失败' })
   }
 })
 

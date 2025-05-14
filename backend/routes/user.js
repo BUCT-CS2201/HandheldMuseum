@@ -138,7 +138,7 @@ router.get('/info/:userId', async (req, res) => {
 router.put('/info/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
-        const { name, phone_number, id_number, gender, age } = req.body;
+        const { name, phone_number, gender, age, description, address, wechat, qq } = req.body;
         
         if (!userId) {
             return res.status(400).json({
@@ -150,9 +150,12 @@ router.put('/info/:userId', async (req, res) => {
         const result = await mysqlService.updateUserInfo(userId, {
             name,
             phone_number,
-            id_number,
             gender,
-            age
+            age,
+            description,
+            address,
+            wechat,
+            qq
         });
         
         if (result) {

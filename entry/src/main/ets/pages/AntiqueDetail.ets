@@ -445,6 +445,24 @@ struct AntiqueDetail {
               .fontColor('#FFFFFF')
           }
           .margin({ top: 20, left: 20, bottom: 10 })
+    Column() {
+      // 返回按钮
+      Row() {
+        Image($r('app.media.ic_back'))
+          .width(24)
+          .height(24)
+          .margin({ left: 16 })
+          .onClick(() => {
+            router.back();
+          })
+        Text('文物详情')
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .margin({ left: 16 })
+      }
+      .width('100%')
+      .height(56)
+      .backgroundColor('#FFFFFF')
 
           Scroll() {
             Column() {
@@ -471,6 +489,21 @@ struct AntiqueDetail {
                 .scrollable(ScrollDirection.Horizontal)
                 .width('100%');
               }
+      Scroll() {
+        Column() {
+          // 图片和视频区域
+          if (this.antique.images.length > 0 || this.antique.videos.length > 0) {
+            Scroll() {
+              Row() {
+                // 显示所有图片
+                ForEach(this.antique.images, (img: string) => {
+                  Image(img)
+                    .width(250)
+                    .height(180)
+                    .margin({ left: 10, right: 10 })
+                    .objectFit(ImageFit.Cover)
+                    .borderRadius(10);
+                }, (img: string) => img);
 
               // 视频区域
               if (this.antique.videos.length > 0) {
@@ -497,6 +530,23 @@ struct AntiqueDetail {
                 .scrollable(ScrollDirection.Horizontal)
                 .width('100%');
               }
+                // 显示所有视频
+                ForEach(this.antique.videos, (video: string) => {
+                  Video({ src: video })
+                    .width(250)
+                    .height(180)
+                    .margin({ left: 10, right: 10 })
+                    .borderRadius(10)
+                    .muted(true)
+                    .autoPlay(false)
+                    .controls(true);
+                }, (video: string) => video);
+              }
+              .padding({ bottom: 4 });
+            }
+            .scrollable(ScrollDirection.Horizontal)
+            .width('100%');
+          }
 
               // 信息区
               Column() {
@@ -524,6 +574,24 @@ struct AntiqueDetail {
                   }
                   .margin({ bottom: 8 })
                   .width('100%')
+            // 信息项容器（白色卡片）
+            Column() {
+              // 类型
+              Row() {
+                Text('类型：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.type || '未知类型')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
+                  .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
 
                   // 尺寸
                   Row() {
@@ -539,6 +607,22 @@ struct AntiqueDetail {
                   }
                   .margin({ bottom: 8 })
                   .width('100%')
+              // 尺寸
+              Row() {
+                Text('尺寸：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.size || '未知尺寸')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
+                  .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
 
                   // 材料
                   Row() {
@@ -554,6 +638,22 @@ struct AntiqueDetail {
                   }
                   .margin({ bottom: 8 })
                   .width('100%')
+              // 材料
+              Row() {
+                Text('材料：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.materials || '未知材料')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
+                  .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
 
                   // 朝代
                   Row() {
@@ -569,6 +669,22 @@ struct AntiqueDetail {
                   }
                   .margin({ bottom: 8 })
                   .width('100%')
+              // 朝代
+              Row() {
+                Text('朝代：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.dynasty || '未知朝代')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
+                  .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
 
                   // 作者
                   Row() {
@@ -590,6 +706,28 @@ struct AntiqueDetail {
                 .backgroundColor('#FFFFFF')
                 .borderRadius(10)
                 .margin({ bottom: 12, left: 10, right: 10 })
+              // 作者
+              Row() {
+                Text('作者：')
+                  .fontSize(14)
+                  .width(90)
+                  .textAlign(TextAlign.End)
+                Text(this.antique.author || '未知作者')
+                  .fontSize(14)
+                  .fontColor('#666666')
+                  .flexGrow(1)
+                  .flexShrink(1)
+                  .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
+              }
+              .margin({ bottom: 10 })
+              .width('100%')
+            }
+            .width('100%')
+            .padding({ left: 12, right: 16, top: 16, bottom: 16 })
+            .backgroundColor('#FFFFFF')
+            .borderRadius(12)
+            .margin({ bottom: 16, left: 12, right: 12 })
 
                 // 文物简介
                 Column() {
@@ -598,6 +736,14 @@ struct AntiqueDetail {
                     .fontWeight(FontWeight.Medium)
                     .margin({ bottom: 6 })
                     .width('100%')
+
+            // 文物简介
+            Column() {
+              Text('文物简介')
+                .fontSize(18)
+                .fontWeight(FontWeight.Medium)
+                .margin({ bottom: 8 })
+                .width('100%')
 
                   Text(this.antique.description || '暂无描述信息')
                     .fontSize(12)
