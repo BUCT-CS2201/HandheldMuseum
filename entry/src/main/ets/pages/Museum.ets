@@ -20,7 +20,7 @@ export default struct Museum {
     let httpRequest = http.createHttp();
 
     httpRequest.request(
-      'http://localhost:3000/api/museum/list',
+      'http://10.4.39.79:3000/api/museum/list',
       {
         method: http.RequestMethod.GET,
       },

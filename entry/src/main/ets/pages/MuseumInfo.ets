@@ -21,7 +21,7 @@ struct MuseumInfo {
   fetchMuseumData() {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      'http://localhost:3000/api/museum/info',
+      'http://10.4.39.79:3000/api/museum/info',
       {
         method: http.RequestMethod.GET,
       },

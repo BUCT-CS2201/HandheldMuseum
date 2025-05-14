@@ -1,12 +1,26 @@
 import http from '@ohos.net.http'
 import router from '@ohos.router'
-import { BusinessError } from '@kit.BasicServicesKit'
+import {BusinessError} from '@kit.BasicServicesKit'
+import picker from '@ohos.file.picker'
+import fs from '@ohos.file.fs'
+
 interface AntiqueItem {
   id: number;
   name: string;
   image: string;
   category: string;
   like_count: number;
+}
+
+interface ResponseId {
+  similar_ids: Array<number>;
+  count: number;
+}
+
+interface SearchResponse {
+  code: number;
+  message: string;
+  data?: ResponseId;
 }
 
 interface LikeResponse {
@@ -19,6 +33,7 @@ export default struct Antique {
   @State searchText: string = ''
   @State selectedCategory: string = '全部'
   @State antiqueList: Array<AntiqueItem> = []
+  @State isSearching: boolean = false
 
   private categories: Array<string> = ['全部', '唐', '宋', '元', '明', '清', '杂项']
   private categoryKeywordsMap: Record<string, Array<string>> = {
@@ -28,41 +43,44 @@ export default struct Antique {
     '明': ['明', '明朝'],
     '清': ['清', '清朝']
   }
-  aboutToAppear() {
+
+  aboutToAppear(): void {
     this.fetchData()
   }
-fetchData(): void {
-  let httpRequest = http.createHttp()
-  httpRequest.request(
-    `http://localhost:3000/api/antique/list?ts=${Date.now()}`,
-    { method: http.RequestMethod.GET },
-    (err, data) => {
-      if (!err && data && typeof data.result === 'string') {
-        const newList: AntiqueItem[] = JSON.parse(data.result)
-        this.antiqueList.splice(0, this.antiqueList.length, ...newList)
-        console.log('最新antiqueList:', this.antiqueList)
-      } else {
-        console.error('请求错误或数据格式不正确:', err)
+
+  fetchData(): void {
+    let httpRequest = http.createHttp()
+    httpRequest.request(
+      `http://localhost:3000/api/antique/list?ts=${Date.now()}`,
+      { method: http.RequestMethod.GET },
+      (err, data) => {
+        if (!err && data && typeof data.result === 'string') {
+          const newList: AntiqueItem[] = JSON.parse(data.result)
+          this.antiqueList.splice(0, this.antiqueList.length, ...newList)
+          console.log('最新antiqueList:', this.antiqueList)
+        } else {
+          console.error('请求错误或数据格式不正确:', err)
+        }
       }
-    }
-  )
-}
+    )
+  }
+
   getFilteredList(): Array<AntiqueItem> {
-    const search = this.searchText.trim().toLowerCase()
+    const search: string = this.searchText.trim().toLowerCase()
 
     return this.antiqueList.filter(item => {
-      const nameMatch = item.name.toLowerCase().includes(search)
+      const nameMatch: boolean = item.name.toLowerCase().includes(search)
 
-      const isInCategory = (() => {
+      const isInCategory: boolean = (() => {
         if (this.selectedCategory === '全部') return true
 
         if (this.selectedCategory === '杂项') {
           // 所有不属于常规分类关键词的视为杂项
           return !Object.values(this.categoryKeywordsMap).some(keywordList =>
-          keywordList.some(keyword => item.category.includes(keyword))
+            keywordList.some(keyword => item.category.includes(keyword))
           )
         }
-        const keywords = this.categoryKeywordsMap[this.selectedCategory] || []
+        const keywords: Array<string> = this.categoryKeywordsMap[this.selectedCategory] || []
         return keywords.some(keyword => item.category.includes(keyword))
       })()
 
@@ -108,21 +126,128 @@ fetchData(): void {
       }
     )
   }
+
+  // 处理图片选择
+  async handleImageSearch(): Promise<void> {
+    try {
+      // 创建图片选择器
+      const photoPicker: picker.PhotoViewPicker = new picker.PhotoViewPicker();
+      const options: picker.PhotoSelectOptions = {
+        MIMEType: picker.PhotoViewMIMETypes.IMAGE_TYPE,
+        maxSelectNumber: 1
+      };
+      const result: picker.PhotoSelectResult = await photoPicker.select(options);
+
+      if (result && result.photoUris && result.photoUris.length > 0) {
+        this.isSearching = true;
+        await this.uploadAndSearch(result.photoUris[0]);
+      }
+      else {
+        console.info('没有上传图片');
+      }
+    } catch (error) {
+      console.error('选择图片失败:', error);
+    }
+  }
+
+  // 上传图片并搜索
+  async uploadAndSearch(imageUri: string): Promise<void> {
+    try {
+      console.info('开始上传图片，图片URI:', imageUri);
+      let httpRequest: http.HttpRequest = http.createHttp();
+
+      // 读取图片文件
+      console.info('开始读取图片文件');
+      try {
+        let resultPhoto = fs.openSync(imageUri, fs.OpenMode.READ_ONLY);
+        let fileTemp = fs.openSync(getContext().filesDir + resultPhoto.name, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
+        let imageUri_1: string = fileTemp.path;
+        fs.copyFileSync(resultPhoto.fd, fileTemp.fd);
+        fs.closeSync(resultPhoto);
+        fs.closeSync(fileTemp);
+
+        const uploadUrl: string = 'http://10.4.59.196:5000/search_similar';
+        const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
+          method: http.RequestMethod.POST,
+          header: {
+            'Content-Type': 'multipart/form-data',
+            'Connection': 'keep-alive'
+          },
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          multiFormDataList: [
+            {
+              name: 'image',  // 确保字段名为 'image'
+              contentType: 'image/jpeg',
+              filePath: imageUri_1,
+              remoteFileName: 'file.jpg'
+            },
+          ],
+        });
+
+        console.info('收到服务器响应，状态码:', response.responseCode);
+        console.info('响应内容:', response.result);  // 打印响应内容
+
+        if (response.responseCode === 200 && response.result instanceof ArrayBuffer) {
+          // 使用 Uint8Array 将 ArrayBuffer 转换为字符串
+          const uint8Array: Uint8Array = new Uint8Array(response.result);
+          let resultString: string = '';
+
+          // 使用 for 循环构建字符串
+          for (let i = 0; i < uint8Array.length; i++) {
+            resultString += String.fromCharCode(uint8Array[i]);
+          }
+
+          try {
+            const result: SearchResponse = JSON.parse(resultString);
+            console.info('解析响应数据:', JSON.stringify(result));
+            if (result.code === 200 && result.data && result.data.similar_ids) {
+              console.info('找到相似图片，ID列表:', result.data.similar_ids);
+              // 跳转到搜索结果页面
+              router.pushUrl({
+                url: 'pages/SearchResult',
+                params: { similarIds: result.data.similar_ids }
+              });
+            } else {
+              console.error('搜索失败:', result.message);
+            }
+          } catch (jsonError) {
+            console.error('JSON 解析失败:', jsonError);
+          }
+        } else {
+          console.error('响应状态码不为200或结果不是字符串');
+        }
+      } catch (fileError) {
+        console.error('文件操作失败:', fileError);
+      }
+    } catch (error) {
+      console.error('上传图片失败，错误详情:', error);
+    } finally {
+      this.isSearching = false;
+      console.info('搜索过程结束');
+    }
+  }
+
   build() {
     Column() {
       // 固定顶部：搜索框 + 分类标签
       // 搜索框区域
       Row() {
-        Image($r('app.media.search_icon'))
+        Image($r('app.media.find_same'))
           .width(20)
           .height(20)
           .margin({ left: 12, right: 8 })
+          .onClick(() => this.handleImageSearch())
+
+        Image($r('app.media.search_icon'))
+          .width(20)
+          .height(20)
+          .margin({ right: 8 })
 
         TextInput({
           placeholder: '搜索文物名称',
           text: this.searchText
         })
-          .onChange(value => this.searchText = value)
+          .onChange((value: string) => this.searchText = value)
           .backgroundColor('#FFFFFF')
           .borderRadius(8)
           .padding(8)
