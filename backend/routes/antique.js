@@ -91,7 +91,7 @@ router.post('/like/:id', (req, res) => {
     });
 });
 // 获取文物评论列表
-router.get('/comments/:id', (req, res) => {
+router.get('/comments/:id', async (req, res) => {
     const id = req.params.id;
     console.log('收到评论请求，relic_id:', id);
     const sql = `
@@ -117,14 +117,14 @@ router.get('/comments/:id', (req, res) => {
             rc.create_time DESC
     `;
     const start = Date.now();
-    mysqlService.query(sql, [id], (err, results) => {
+    try {
+        const results = await mysqlService.query(sql, [id]);
         console.log('SQL执行耗时:', Date.now() - start, 'ms');
-        if (err) {
-            console.error('查询评论失败:', err);
-            return res.status(500).json({ error: '数据库查询失败' });
-        }
         res.json(results);
-    });
+    } catch (err) {
+        console.error('查询评论失败:', err);
+        res.status(500).json({ error: '数据库查询失败' });
+    }
 });
 
 // 提交评论
