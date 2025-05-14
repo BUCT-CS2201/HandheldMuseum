@@ -144,30 +144,29 @@ struct AntiqueDetail {
     Column() {
       // 返回按钮
       Row() {
-        Button('返回')
+        Image($r('app.media.ic_back'))
+          .width(24)
+          .height(24)
+          .margin({ left: 16 })
           .onClick(() => {
             router.back();
           })
-          .width(80)
-          .height(40)
-          .backgroundColor('#DAA520')
-          .borderRadius(8)
-          .fontSize(16)
-          .fontColor('#FFFFFF')
+        Text('文物详情')
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .margin({ left: 16 })
       }
-      .margin({ top: 20, left: 20, bottom: 10 })
+      .width('100%')
+      .height(56)
+      .backgroundColor('#FFFFFF')
 
       Scroll() {
         Column() {
-          // 图片区域
-          if (this.antique.images.length > 0) {
-            Text('图片')
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .margin({ top: 16, left: 16, bottom: 6 });
-
+          // 图片和视频区域
+          if (this.antique.images.length > 0 || this.antique.videos.length > 0) {
             Scroll() {
               Row() {
+                // 显示所有图片
                 ForEach(this.antique.images, (img: string) => {
                   Image(img)
                     .width(250)
@@ -176,22 +175,8 @@ struct AntiqueDetail {
                     .objectFit(ImageFit.Cover)
                     .borderRadius(10);
                 }, (img: string) => img);
-              }
-              .padding({ bottom: 8 });
-            }
-            .scrollable(ScrollDirection.Horizontal)
-            .width('100%');
-          }
 
-          // 视频区域
-          if (this.antique.videos.length > 0) {
-            Text('视频')
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .margin({ top: 16, left: 16, bottom: 6 });
-
-            Scroll() {
-              Row() {
+                // 显示所有视频
                 ForEach(this.antique.videos, (video: string) => {
                   Video({ src: video })
                     .width(250)
@@ -203,7 +188,7 @@ struct AntiqueDetail {
                     .controls(true);
                 }, (video: string) => video);
               }
-              .padding({ bottom: 8 });
+              .padding({ bottom: 4 });
             }
             .scrollable(ScrollDirection.Horizontal)
             .width('100%');
@@ -231,7 +216,9 @@ struct AntiqueDetail {
                   .fontSize(14)
                   .fontColor('#666666')
                   .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
                   .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
               }
               .margin({ bottom: 10 })
               .width('100%')
@@ -246,7 +233,9 @@ struct AntiqueDetail {
                   .fontSize(14)
                   .fontColor('#666666')
                   .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
                   .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
               }
               .margin({ bottom: 10 })
               .width('100%')
@@ -261,7 +250,9 @@ struct AntiqueDetail {
                   .fontSize(14)
                   .fontColor('#666666')
                   .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
                   .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
               }
               .margin({ bottom: 10 })
               .width('100%')
@@ -276,7 +267,9 @@ struct AntiqueDetail {
                   .fontSize(14)
                   .fontColor('#666666')
                   .flexGrow(1)
+                  .flexShrink(1)  // 允许收缩
                   .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
               }
               .margin({ bottom: 10 })
               .width('100%')
@@ -291,16 +284,19 @@ struct AntiqueDetail {
                   .fontSize(14)
                   .fontColor('#666666')
                   .flexGrow(1)
+                  .flexShrink(1)
                   .textAlign(TextAlign.Start)
+                  .margin({ left: 8 })
               }
               .margin({ bottom: 10 })
               .width('100%')
             }
             .width('100%')
-            .padding(16)
+            .padding({ left: 12, right: 16, top: 16, bottom: 16 })
             .backgroundColor('#FFFFFF')
             .borderRadius(12)
             .margin({ bottom: 16, left: 12, right: 12 })
+
 
             // 文物简介
             Column() {
