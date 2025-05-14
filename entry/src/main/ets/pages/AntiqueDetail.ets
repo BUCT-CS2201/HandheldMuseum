@@ -1,5 +1,8 @@
 import http from '@ohos.net.http';
 import router from '@ohos.router';
+import prompt from '@ohos.prompt';
+import common from '@ohos.app.ability.common';
+import { UserStore } from '../common/UserStore';
 
 // 路由参数类型
 interface RouterParams {
@@ -36,7 +39,51 @@ interface AntiqueResponse {
   videos?: string | string[];
 }
 
+// 评论类型
+interface CommentItem {
+  comment_id: number;
+  content: string;
+  like_count: number;
+  reply_count: number;
+  create_time: string;
+  user_name: string;
+  parent_id?: number;
+  status: number;
+  is_deleted: number;
+}
+
+interface CommentStatusResult {
+  comment_status: number;
+  name: string;
+}
+
+interface FetchResult {
+  result: string | object;
+}
+
+interface RelicStatus {
+  is_liked: boolean;
+  is_favorited: boolean;
+  like_count: number;
+  favorite_count: number;
+}
+
+interface LikeCountResult {
+  like_count: number;
+}
+
+// 评论树类型
+class CommentTreeItem {
+  comment: CommentItem;
+  replies: CommentItem[];
+  constructor(comment: CommentItem, replies: CommentItem[]) {
+    this.comment = comment;
+    this.replies = replies;
+  }
+}
+
 @Entry
+@Preview
 @Component
 struct AntiqueDetail {
   @State antique: AntiqueDetailItem = {
@@ -52,13 +99,32 @@ struct AntiqueDetail {
     images: [],
     videos: []
   }
+  @State comments: CommentItem[] = [];
+  @State commentTree: CommentTreeItem[] = [];
+  @State commentContent: string = '';
+  @State replyParentId: number | null = null;
+  @State toastMessage: string = '';
+  @State likeCount: number = 0;
+  @State favoriteCount: number = 0;
+  @State isLiked: boolean = false;
+  @State isFavorited: boolean = false;
 
   aboutToAppear() {
     const params = router.getParams() as RouterParams;
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
+    console.log('aboutToAppear被调用，relicId:', relicId);
     if (relicId > 0) {
       this.fetchAntiqueDetail(relicId);
+      this.fetchComments(relicId);
+      this.checkLikeAndFavoriteStatus();
     }
+  }
+
+  showToast(message: string) {
+    this.toastMessage = message;
+    setTimeout(() => {
+      prompt.showToast({ message: this.toastMessage });
+    }, 0);
   }
 
   fetchAntiqueDetail(id: number): void {
@@ -72,9 +138,9 @@ struct AntiqueDetail {
         method: http.RequestMethod.GET,
         expectDataType: http.HttpDataType.OBJECT
       },
-      (err, data) => {
+      (err: Error | undefined, data: FetchResult) => {
         if (err) {
-          console.error('请求失败:', err?.code, err?.message, JSON.stringify(err));
+          console.error('请求失败:', JSON.stringify(err));
           return;
         }
 
@@ -140,196 +206,618 @@ struct AntiqueDetail {
     );
   }
 
-  build() {
-    Column() {
-      // 返回按钮
-      Row() {
-        Button('返回')
-          .onClick(() => {
-            router.back();
-          })
-          .width(80)
-          .height(40)
-          .backgroundColor('#DAA520')
-          .borderRadius(8)
-          .fontSize(16)
-          .fontColor('#FFFFFF')
+  fetchComments(id: number): void {
+    console.log('fetchComments被调用，id:', id);
+    const httpRequest = http.createHttp();
+    const url = `http://localhost:3000/api/antique/comments/${id}`;
+    httpRequest.request(
+      url,
+      { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
+      (err: Error | undefined, data: FetchResult) => {
+        if (err) {
+          console.error('请求评论失败:', JSON.stringify(err));
+          return;
+        }
+        console.log('评论接口返回:', JSON.stringify(data.result));
+        let commentArr: CommentItem[] = [];
+        if (typeof data.result === 'string') {
+          commentArr = JSON.parse(data.result) as CommentItem[];
+        } else if (typeof data.result === 'object') {
+          commentArr = data.result as CommentItem[];
+        }
+        // 只保留 status=1 且 is_deleted=0 的评论
+        commentArr = commentArr.filter(c => c.status === 1 && c.is_deleted === 0);
+        setTimeout(() => {
+          this.comments = commentArr;
+          // 构建评论树
+          const topLevel = this.comments.filter((c: CommentItem) => c.parent_id == null || c.parent_id === 0);
+          this.commentTree = topLevel.map((parent: CommentItem) => {
+            return new CommentTreeItem(
+              parent,
+              this.comments.filter((c: CommentItem) => c.parent_id === parent.comment_id)
+            );
+          });
+        }, 0);
       }
-      .margin({ top: 20, left: 20, bottom: 10 })
+    );
+  }
 
-      Scroll() {
-        Column() {
-          // 图片区域
-          if (this.antique.images.length > 0) {
-            Text('图片')
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .margin({ top: 16, left: 16, bottom: 6 });
+  submitComment(): void {
+    const params = router.getParams() as RouterParams;
+    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
+    const userId = UserStore.userId;
 
-            Scroll() {
-              Row() {
-                ForEach(this.antique.images, (img: string) => {
-                  Image(img)
-                    .width(250)
-                    .height(180)
-                    .margin({ left: 10, right: 10 })
-                    .objectFit(ImageFit.Cover)
-                    .borderRadius(10);
-                }, (img: string) => img);
+    if (!userId) {
+      this.showToast('请先登录');
+      return;
+    }
+
+    // 1. 先查评论状态
+    const httpRequest = http.createHttp();
+    httpRequest.request(
+      `http://localhost:3000/api/user/comment_status/${userId}`,
+      { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
+      (err: Error | undefined, data: FetchResult) => {
+        let resultObj: CommentStatusResult | null = null;
+        if (err) {
+          this.showToast('查询评论状态失败');
+          return;
+        }
+        if (typeof data.result === 'string') {
+          resultObj = JSON.parse(data.result) as CommentStatusResult;
+        } else if (typeof data.result === 'object') {
+          resultObj = data.result as CommentStatusResult;
+        }
+        if (!resultObj || resultObj.comment_status !== 1) {
+          this.showToast('您已被禁止评论');
+          return;
+        }
+        // 2. 允许评论，提交评论
+        if (relicId > 0 && this.commentContent) {
+          const httpRequest2 = http.createHttp();
+          const url = `http://localhost:3000/api/antique/comments/${relicId}`;
+          httpRequest2.request(
+            url,
+            {
+              method: http.RequestMethod.POST,
+              header: { 'Content-Type': 'application/json' },
+              expectDataType: http.HttpDataType.OBJECT,
+              extraData: JSON.stringify({
+                user_id: userId,
+                content: this.commentContent,
+                parent_id: this.replyParentId || null
+              })
+            },
+            (err2: Error | undefined, data2: FetchResult) => {
+              if (err2) {
+                this.showToast('提交评论失败');
+                return;
               }
-              .padding({ bottom: 8 });
+              this.showToast('评论已提交，审核通过后将显示');
+              this.commentContent = '';
+              this.replyParentId = null;
             }
-            .scrollable(ScrollDirection.Horizontal)
-            .width('100%');
-          }
-
-          // 视频区域
-          if (this.antique.videos.length > 0) {
-            Text('视频')
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .margin({ top: 16, left: 16, bottom: 6 });
-
-            Scroll() {
-              Row() {
-                ForEach(this.antique.videos, (video: string) => {
-                  Video({ src: video })
-                    .width(250)
-                    .height(180)
-                    .margin({ left: 10, right: 10 })
-                    .borderRadius(10)
-                    .muted(true)
-                    .autoPlay(false)
-                    .controls(true);
-                }, (video: string) => video);
-              }
-              .padding({ bottom: 8 });
-            }
-            .scrollable(ScrollDirection.Horizontal)
-            .width('100%');
-          }
-
-          // 信息区
-          Column() {
-            // 文物名称（居中显示）
-            Text(this.antique.name)
-              .fontSize(22)
-              .fontWeight(FontWeight.Bold)
-              .margin({ top: 20, bottom: 16 })
-              .width('100%')
-              .textAlign(TextAlign.Center)
-
-            // 信息项容器（白色卡片）
-            Column() {
-              // 类型
-              Row() {
-                Text('类型：')
-                  .fontSize(14)
-                  .width(90)
-                  .textAlign(TextAlign.End)
-                Text(this.antique.type || '未知类型')
-                  .fontSize(14)
-                  .fontColor('#666666')
-                  .flexGrow(1)
-                  .textAlign(TextAlign.Start)
-              }
-              .margin({ bottom: 10 })
-              .width('100%')
-
-              // 尺寸
-              Row() {
-                Text('尺寸：')
-                  .fontSize(14)
-                  .width(90)
-                  .textAlign(TextAlign.End)
-                Text(this.antique.size || '未知尺寸')
-                  .fontSize(14)
-                  .fontColor('#666666')
-                  .flexGrow(1)
-                  .textAlign(TextAlign.Start)
-              }
-              .margin({ bottom: 10 })
-              .width('100%')
-
-              // 材料
-              Row() {
-                Text('材料：')
-                  .fontSize(14)
-                  .width(90)
-                  .textAlign(TextAlign.End)
-                Text(this.antique.materials || '未知材料')
-                  .fontSize(14)
-                  .fontColor('#666666')
-                  .flexGrow(1)
-                  .textAlign(TextAlign.Start)
-              }
-              .margin({ bottom: 10 })
-              .width('100%')
-
-              // 朝代
-              Row() {
-                Text('朝代：')
-                  .fontSize(14)
-                  .width(90)
-                  .textAlign(TextAlign.End)
-                Text(this.antique.dynasty || '未知朝代')
-                  .fontSize(14)
-                  .fontColor('#666666')
-                  .flexGrow(1)
-                  .textAlign(TextAlign.Start)
-              }
-              .margin({ bottom: 10 })
-              .width('100%')
-
-              // 作者
-              Row() {
-                Text('作者：')
-                  .fontSize(14)
-                  .width(90)
-                  .textAlign(TextAlign.End)
-                Text(this.antique.author || '未知作者')
-                  .fontSize(14)
-                  .fontColor('#666666')
-                  .flexGrow(1)
-                  .textAlign(TextAlign.Start)
-              }
-              .margin({ bottom: 10 })
-              .width('100%')
-            }
-            .width('100%')
-            .padding(16)
-            .backgroundColor('#FFFFFF')
-            .borderRadius(12)
-            .margin({ bottom: 16, left: 12, right: 12 })
-
-            // 文物简介
-            Column() {
-              Text('文物简介')
-                .fontSize(18)
-                .fontWeight(FontWeight.Medium)
-                .margin({ bottom: 8 })
-                .width('100%')
-
-              Text(this.antique.description || '暂无描述信息')
-                .fontSize(14)
-                .lineHeight(22)
-                .fontColor('#444444')
-                .width('100%')
-            }
-            .width('100%')
-            .padding(16)
-            .backgroundColor('#FFFFFF')
-            .borderRadius(12)
-          }
-          .width('100%')
-          .padding(12)
-          .padding(16)
-          .backgroundColor('#FFFFFF')
-          .borderRadius(12)
-          .margin({ top: 12, bottom: 30, left: 12, right: 12 });
+          );
         }
       }
-      .backgroundColor('#F5F5F5');
+    );
+  }
+
+  likeComment(comment_id: number): void {
+    const httpRequest = http.createHttp();
+    const url = `http://localhost:3000/api/antique/comments/like/${comment_id}`;
+    httpRequest.request(
+      url,
+      {
+        method: http.RequestMethod.POST,
+        header: {
+          'Content-Type': 'application/json'
+        },
+        expectDataType: http.HttpDataType.OBJECT,
+        extraData: JSON.stringify({
+          user_id: 1 // 这里需要替换为实际的用户ID
+        })
+      },
+      (err: Error | undefined, data: FetchResult) => {
+        if (err) {
+          console.error('点赞评论失败:', JSON.stringify(err));
+          return;
+        }
+        this.fetchComments(this.antique.relic_id);
+      }
+    );
+  }
+
+  likeAntique(): void {
+    const params = router.getParams() as RouterParams;
+    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
+    const userId = 1; // 替换为实际登录用户ID
+
+    console.log('准备发送点赞请求，relicId:', relicId, 'userId:', userId);
+
+    const httpRequest = http.createHttp();
+    httpRequest.request(
+      `http://localhost:3000/api/antique/like/${relicId}`,
+      {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        expectDataType: http.HttpDataType.OBJECT,
+        extraData: JSON.stringify({ user_id: userId })
+      },
+      (err: Error | undefined, data: FetchResult) => {
+        if (err) {
+          console.error('点赞请求失败:', JSON.stringify(err));
+          this.showToast('点赞失败');
+          return;
+        }
+        console.log('点赞接口返回原始数据:', JSON.stringify(data));
+        let likeCount = 0;
+        if (typeof data.result === 'string') {
+          const parsed = JSON.parse(data.result) as LikeCountResult;
+          likeCount = parsed.like_count;
+        } else if (typeof data.result === 'object') {
+          likeCount = (data.result as LikeCountResult).like_count;
+        }
+        console.log('点赞接口解析后 like_count:', likeCount);
+        this.likeCount = likeCount;
+        // 点赞后立即刷新状态，确保 isLiked 状态同步
+        this.checkLikeAndFavoriteStatus();
+      }
+    );
+  }
+
+  favoriteAntique(): void {
+    const params = router.getParams() as RouterParams;
+    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
+    const userId = 1; // 替换为实际登录用户ID
+
+    const httpRequest = http.createHttp();
+    httpRequest.request(
+      `http://localhost:3000/api/antique/favorite/${relicId}`,
+      {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        expectDataType: http.HttpDataType.OBJECT,
+        extraData: JSON.stringify({ user_id: userId })
+      },
+      (err: Error | undefined, data: FetchResult) => {
+        if (err) {
+          this.showToast('收藏失败');
+          return;
+        }
+        if (typeof data.result === 'string') {
+          const result: RelicStatus = JSON.parse(data.result as string);
+          this.favoriteCount = result.favorite_count;
+          this.isFavorited = !this.isFavorited;
+          this.showToast(this.isFavorited ? '收藏成功' : '取消收藏成功');
+        }
+      }
+    );
+  }
+
+  checkLikeAndFavoriteStatus(): void {
+    const params = router.getParams() as RouterParams;
+    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
+    const userId = 1; // 替换为实际登录用户ID
+
+    const httpRequest = http.createHttp();
+    httpRequest.request(
+      `http://localhost:3000/api/antique/status/${relicId}?user_id=${userId}`,
+      { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
+      (err: Error | undefined, data: FetchResult) => {
+        if (err) {
+          console.error('获取状态失败:', err);
+          return;
+        }
+        let result: RelicStatus;
+        if (typeof data.result === 'string') {
+          result = JSON.parse(data.result) as RelicStatus;
+        } else if (typeof data.result === 'object') {
+          result = data.result as RelicStatus;
+        } else {
+          console.error('接口返回格式异常:', data.result);
+          return;
+        }
+        this.isLiked = result.is_liked;
+        this.isFavorited = result.is_favorited;
+        this.likeCount = result.like_count;
+        this.favoriteCount = result.favorite_count;
+        console.log('接口返回like_count:', result.like_count, '赋值后 this.likeCount:', this.likeCount);
+      }
+    );
+  }
+
+  build() {
+    Stack() {
+      Stack() {
+        Column() {
+          // 返回按钮
+          Row() {
+            Button('返回')
+              .onClick(() => {
+                router.back();
+              })
+              .width(80)
+              .height(40)
+              .backgroundColor('#DAA520')
+              .borderRadius(8)
+              .fontSize(16)
+              .fontColor('#FFFFFF')
+          }
+          .margin({ top: 20, left: 20, bottom: 10 })
+
+          Scroll() {
+            Column() {
+              // 图片区域
+              if (this.antique.images.length > 0) {
+                Text('图片')
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Bold)
+                  .margin({ top: 12, left: 12, bottom: 4 });
+
+                Scroll() {
+                  Row() {
+                    ForEach(this.antique.images, (img: string) => {
+                      Image(img)
+                        .width(180)
+                        .height(130)
+                        .margin({ left: 8, right: 8 })
+                        .objectFit(ImageFit.Cover)
+                        .borderRadius(8);
+                    }, (img: string) => img);
+                  }
+                  .padding({ bottom: 6 });
+                }
+                .scrollable(ScrollDirection.Horizontal)
+                .width('100%');
+              }
+
+              // 视频区域
+              if (this.antique.videos.length > 0) {
+                Text('视频')
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Bold)
+                  .margin({ top: 12, left: 12, bottom: 4 });
+
+                Scroll() {
+                  Row() {
+                    ForEach(this.antique.videos, (video: string) => {
+                      Video({ src: video })
+                        .width(180)
+                        .height(130)
+                        .margin({ left: 8, right: 8 })
+                        .borderRadius(8)
+                        .muted(true)
+                        .autoPlay(false)
+                        .controls(true);
+                    }, (video: string) => video);
+                  }
+                  .padding({ bottom: 6 });
+                }
+                .scrollable(ScrollDirection.Horizontal)
+                .width('100%');
+              }
+
+              // 信息区
+              Column() {
+                // 文物名称（居中显示）
+                Text(this.antique.name)
+                  .fontSize(20)
+                  .fontWeight(FontWeight.Bold)
+                  .margin({ top: 16, bottom: 12 })
+                  .width('100%')
+                  .textAlign(TextAlign.Center)
+
+                // 信息项容器（白色卡片）
+                Column() {
+                  // 类型
+                  Row() {
+                    Text('类型：')
+                      .fontSize(12)
+                      .width(70)
+                      .textAlign(TextAlign.End)
+                    Text(this.antique.type || '未知类型')
+                      .fontSize(12)
+                      .fontColor('#666666')
+                      .flexGrow(1)
+                      .textAlign(TextAlign.Start)
+                  }
+                  .margin({ bottom: 8 })
+                  .width('100%')
+
+                  // 尺寸
+                  Row() {
+                    Text('尺寸：')
+                      .fontSize(12)
+                      .width(70)
+                      .textAlign(TextAlign.End)
+                    Text(this.antique.size || '未知尺寸')
+                      .fontSize(12)
+                      .fontColor('#666666')
+                      .flexGrow(1)
+                      .textAlign(TextAlign.Start)
+                  }
+                  .margin({ bottom: 8 })
+                  .width('100%')
+
+                  // 材料
+                  Row() {
+                    Text('材料：')
+                      .fontSize(12)
+                      .width(70)
+                      .textAlign(TextAlign.End)
+                    Text(this.antique.materials || '未知材料')
+                      .fontSize(12)
+                      .fontColor('#666666')
+                      .flexGrow(1)
+                      .textAlign(TextAlign.Start)
+                  }
+                  .margin({ bottom: 8 })
+                  .width('100%')
+
+                  // 朝代
+                  Row() {
+                    Text('朝代：')
+                      .fontSize(12)
+                      .width(70)
+                      .textAlign(TextAlign.End)
+                    Text(this.antique.dynasty || '未知朝代')
+                      .fontSize(12)
+                      .fontColor('#666666')
+                      .flexGrow(1)
+                      .textAlign(TextAlign.Start)
+                  }
+                  .margin({ bottom: 8 })
+                  .width('100%')
+
+                  // 作者
+                  Row() {
+                    Text('作者：')
+                      .fontSize(12)
+                      .width(70)
+                      .textAlign(TextAlign.End)
+                    Text(this.antique.author || '未知作者')
+                      .fontSize(12)
+                      .fontColor('#666666')
+                      .flexGrow(1)
+                      .textAlign(TextAlign.Start)
+                  }
+                  .margin({ bottom: 8 })
+                  .width('100%')
+                }
+                .width('100%')
+                .padding(12)
+                .backgroundColor('#FFFFFF')
+                .borderRadius(10)
+                .margin({ bottom: 12, left: 10, right: 10 })
+
+                // 文物简介
+                Column() {
+                  Text('文物简介')
+                    .fontSize(16)
+                    .fontWeight(FontWeight.Medium)
+                    .margin({ bottom: 6 })
+                    .width('100%')
+
+                  Text(this.antique.description || '暂无描述信息')
+                    .fontSize(12)
+                    .lineHeight(20)
+                    .fontColor('#444444')
+                    .width('100%')
+                }
+                .width('100%')
+                .padding(12)
+                .backgroundColor('#FFFFFF')
+                .borderRadius(10)
+              }
+              .width('100%')
+              .padding(10)
+              .backgroundColor('#FFFFFF')
+              .borderRadius(10)
+              .margin({
+                top: 10,
+                bottom: 20,
+                left: 10,
+                right: 10
+              })
+
+              // 评论区域
+              Column() {
+                Text('评论')
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Bold)
+                  .margin({ top: 12, left: 12, bottom: 4 })
+
+                // 评论列表容器
+                Column() {
+                  ForEach(this.commentTree, (item: CommentTreeItem) => {
+                    Column() {
+                      // 父评论
+                      Row() {
+                        Column() {
+                          Text(item.comment.user_name)
+                            .fontSize(12)
+                            .fontWeight(FontWeight.Bold)
+                          Text(item.comment.create_time)
+                            .fontSize(10)
+                            .fontColor('#666666')
+                        }
+                        .flexGrow(1)
+                        // 点赞区域
+                        Row() {
+                          Text(item.comment.like_count.toString())
+                            .fontSize(12)
+                            .margin({ right: 4 })
+                          Button('点赞')
+                            .onClick(() => {
+                              this.likeComment(item.comment.comment_id)
+                            })
+                            .width(50)
+                            .height(25)
+                            .backgroundColor('#F5F5F5')
+                            .borderRadius(12)
+                            .fontSize(12)
+                            .fontColor('#666666')
+                        }
+                      }
+                      .margin({ bottom: 8 })
+                      // 评论内容
+                      Text(item.comment.content)
+                        .fontSize(12)
+                        .lineHeight(20)
+                        .fontColor('#444444')
+                        .margin({ top: 4, left: 44, right: 12 })
+                      // 回复按钮
+                      Button('回复')
+                        .onClick(() => {
+                          this.replyParentId = item.comment.comment_id;
+                          this.commentContent = `@${item.comment.user_name} `;
+                        })
+                        .width(50)
+                        .height(25)
+                        .backgroundColor('#F5F5F5')
+                        .borderRadius(12)
+                        .fontSize(12)
+                        .fontColor('#666666')
+                        .margin({ left: 44 })
+                    }
+                    .margin({ bottom: 12 })
+                    .backgroundColor('#FFFFFF')
+                    .borderRadius(10)
+                    .padding(10)
+                    // 子评论
+                    ForEach(item.replies, (reply: CommentItem) => {
+                      Column() {
+                        Row() {
+                          Column() {
+                            Text(reply.user_name)
+                              .fontSize(12)
+                              .fontWeight(FontWeight.Bold)
+                            Text(reply.create_time)
+                              .fontSize(10)
+                              .fontColor('#666666')
+                          }
+                          .flexGrow(1)
+                          // 点赞区域
+                          Row() {
+                            Text(reply.like_count.toString())
+                              .fontSize(12)
+                              .margin({ right: 4 })
+                            Button('点赞')
+                              .onClick(() => {
+                                this.likeComment(reply.comment_id)
+                              })
+                              .width(50)
+                              .height(25)
+                              .backgroundColor('#F5F5F5')
+                              .borderRadius(12)
+                              .fontSize(12)
+                              .fontColor('#666666')
+                          }
+                        }
+                        .margin({ bottom: 8 })
+                        // 评论内容
+                        Text(reply.content)
+                          .fontSize(12)
+                          .lineHeight(20)
+                          .fontColor('#444444')
+                          .margin({ top: 4, left: 44, right: 12 })
+                      }
+                      .margin({ bottom: 12, left: 30 }) // 子评论缩进
+                      .backgroundColor('#FFFFFF')
+                      .borderRadius(10)
+                      .padding(10)
+                    })
+                  })
+                }
+                .width('100%')
+                .backgroundColor('#F5F5F5')
+                .padding(12)
+
+                // 新增：所有评论过此文物的用户及内容
+                Text('所有评论过此文物的用户及内容如下：')
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .margin({ top: 16, left: 12, bottom: 4 })
+                Column() {
+                  ForEach(this.comments, (comment: CommentItem) => {
+                    Row() {
+                      Text(comment.user_name)
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Bold)
+                        .margin({ right: 8 })
+                      Text(comment.content)
+                        .fontSize(12)
+                        .fontColor('#444444')
+                    }
+                    .margin({ bottom: 6, left: 16 })
+                  })
+                }
+                .width('100%')
+                .backgroundColor('#F9F9F9')
+                .padding(8)
+              }
+            }
+          }
+        }
+        .padding({ bottom: 70 }) // 让出底部空间，避免内容被底栏遮住
+      }
+
+      // 固定底部栏
+      Row({ space: 8 }) {
+        // 评论输入框
+        TextInput({ placeholder: '发表评论...' })
+          .onChange((value: string) => {
+            this.commentContent = value
+          })
+          .type(InputType.Normal)
+          .height(40)
+          .borderRadius(20)
+          .padding({ left: 12 })
+          .backgroundColor('#FFFFFF')
+          .margin({ left: 12 })
+          .width('200.00vp')
+
+        // 评论按钮
+        Button('评论')
+          .onClick(() => {
+            this.submitComment()
+          })
+          .width(60)
+          .height(40)
+          .backgroundColor('#DAA520')
+          .borderRadius(20)
+          .fontSize(14)
+          .fontColor('#FFFFFF')
+
+        // 点赞按钮+数字
+        Row({ space: 4 }) {
+          Button({ type: ButtonType.Circle }) {
+            Image(this.isLiked ? $r('app.media.like_filled') : $r('app.media.like'))
+              .width(24)
+              .height(24)
+          }
+          .onClick(() => this.likeAntique())
+          .width(40)
+          .height(40)
+          .backgroundColor('#F5F5F5')
+
+          Text(this.likeCount.toString())
+            .fontSize(16)
+            .fontColor('#666666')
+            .width(32)
+            .textAlign(TextAlign.Center)
+        }
+        .padding({ right: 12 })
+      }
+      .width('100%')
+      .height(56)
+      .backgroundColor('#F5F5F5')
+      .position({ x: 0, y: '100%' })
+      .translate({ y: -56 })
     }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#F7F8FA')
   }
 }
