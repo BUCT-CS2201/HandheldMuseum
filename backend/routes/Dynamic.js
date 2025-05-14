@@ -122,6 +122,7 @@ router.get('/list', async (req, res) => {
       LEFT JOIN user u ON c.user_id = u.user_id
       WHERE c.relic_id = 0
       AND c.is_deleted = 0
+      AND c.parent_id = 0
       GROUP BY c.comment_id
       ORDER BY c.create_time DESC
     `
@@ -308,5 +309,127 @@ router.post('/upload/image', upload.single('image'), async (req, res) => {
     res.status(500).json({ error: '图片上传失败' })
   }
 })
+
+// 获取评论列表
+router.get('/comments/:dynamicId', async (req, res) => {
+  try {
+    const { dynamicId } = req.params;
+    const sql = `
+      SELECT 
+        c.comment_id,
+        c.content,
+        c.create_time,
+        c.like_count,
+        c.reply_count,
+        c.parent_id,
+        u.name AS username
+      FROM relic_comment c
+      LEFT JOIN user u ON c.user_id = u.user_id
+      WHERE c.relic_id = 0 
+      AND c.is_deleted = 0
+      AND c.status = 1
+      AND c.parent_id = ?
+      ORDER BY c.create_time DESC
+    `;
+    
+    const comments = await mysqlService.query(sql, [dynamicId]);
+    res.json(comments);
+  } catch (err) {
+    console.error('获取评论失败:', err);
+    res.status(500).json({ error: '获取评论失败' });
+  }
+});
+
+// 发表评论
+router.post('/comment', async (req, res) => {
+  const { dynamic_id, user_id, content, parent_id } = req.body;
+
+  if (!dynamic_id || !user_id || !content) {
+    return res.status(400).json({ error: '参数不完整' });
+  }
+
+  let connection;
+  try {
+    connection = await mysqlService.beginTransaction();
+
+    // 插入评论
+    const insertSql = `
+      INSERT INTO relic_comment
+      (relic_id, user_id, content, parent_id, status, like_count, reply_count)
+      VALUES (0, ?, ?, ?, 0, 0, 0)
+    `;
+    const result = await connection.query(insertSql, [user_id, content, parent_id || null]);
+
+    // 如果是回复评论，更新父评论的回复数
+    if (parent_id) {
+      const updateSql = `
+        UPDATE relic_comment
+        SET reply_count = reply_count + 1
+        WHERE comment_id = ?
+      `;
+      await connection.query(updateSql, [parent_id]);
+    }
+
+    await mysqlService.commit(connection);
+
+    res.json({
+      comment_id: result.insertId,
+      message: '评论发布成功，等待审核'
+    });
+  } catch (err) {
+    if (connection) {
+      await mysqlService.rollback(connection);
+    }
+    console.error('评论发布失败:', err);
+    res.status(500).json({ error: '评论发布失败' });
+  }
+});
+
+// 删除评论
+router.delete('/comment/:commentId', async (req, res) => {
+  const { commentId } = req.params;
+  const { user_id } = req.body;
+
+  if (!user_id) {
+    return res.status(400).json({ error: '缺少用户ID' });
+  }
+
+  try {
+    // 检查评论是否存在且属于该用户
+    const checkSql = `
+      SELECT comment_id, parent_id
+      FROM relic_comment
+      WHERE comment_id = ? AND user_id = ? AND is_deleted = 0
+    `;
+    const [comment] = await mysqlService.query(checkSql, [commentId, user_id]);
+
+    if (!comment) {
+      return res.status(404).json({ error: '评论不存在或无权限删除' });
+    }
+
+    // 软删除评论
+    const deleteSql = `
+      UPDATE relic_comment
+      SET is_deleted = 1
+      WHERE comment_id = ?
+    `;
+    await mysqlService.query(deleteSql, [commentId]);
+
+    // 如果是回复评论，减少父评论的回复数
+    if (comment.parent_id) {
+      const updateSql = `
+        UPDATE relic_comment
+        SET reply_count = reply_count - 1
+        WHERE comment_id = ?
+      `;
+      await mysqlService.query(updateSql, [comment.parent_id]);
+    }
+
+    res.json({ message: '评论删除成功' });
+  } catch (err) {
+    console.error('删除评论失败:', err);
+    res.status(500).json({ error: '删除评论失败' });
+  }
+});
 
 module.exports = router

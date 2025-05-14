@@ -14,6 +14,10 @@ export interface APICommentItem {
   content: string;
   create_time: string;
   username: string;
+  parent_id?: number;
+  reply_count: number;
+  like_count: number;
+  avatar?: string;
 }
 
 export interface APIDynamicResponse {
@@ -33,17 +37,23 @@ export class CommentItem {
   user: string;
   content: string;
   time: string;
+  parent_id?: number;
+  reply_count: number;
 
-  constructor(id: number, user: string, content: string, isoTime: string) {
+  constructor(
+    id: number,
+    user: string,
+    content: string,
+    time: string,
+    parent_id?: number,
+    reply_count: number = 0
+  ) {
     this.id = id;
     this.user = user;
     this.content = content;
-    this.time = this.formatTime(isoTime);
-  }
-
-  private formatTime(isoTime: string): string {
-    const date = new Date(isoTime);
-    return `${date.getMonth()+1}月${date.getDate()}日 ${date.getHours()}:${date.getMinutes()}`;
+    this.time = time;
+    this.parent_id = parent_id;
+    this.reply_count = reply_count;
   }
 }
 
