@@ -100,7 +100,7 @@ struct MuseumDetail {
   fetchMuseumDetail(museumId: number) {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/museum/detail/${museumId}`,
+      `http://192.168.1.100:3000/api/museum/detail/${museumId}`,
       {
         method: http.RequestMethod.GET,
       },
@@ -132,7 +132,7 @@ struct MuseumDetail {
   fetchMuseumRelics(museumId: number) {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/museum/relics/${museumId}`,
+      `http://192.168.1.100:3000/api/museum/relics/${museumId}`,
       {
         method: http.RequestMethod.GET,
       },

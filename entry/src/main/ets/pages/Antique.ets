@@ -27,39 +27,129 @@ interface LikeResponse {
   like_count: number;
 }
 
+// 添加DataSource类
+class AntiqueDataSource implements IDataSource {
+  private dataArray: Array<AntiqueItem> = []
+  private listeners: DataChangeListener[] = []
+
+  constructor(data: Array<AntiqueItem>) {
+    this.dataArray = data
+  }
+
+  totalCount(): number {
+    return this.dataArray.length
+  }
+
+  getData(index: number): AntiqueItem {
+    return this.dataArray[index]
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {
+    this.listeners.push(listener)
+  }
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {
+    const index = this.listeners.indexOf(listener)
+    if (index >= 0) {
+      this.listeners.splice(index, 1)
+    }
+  }
+
+  notifyDataChange(): void {
+    this.listeners.forEach(listener => {
+      listener.onDataChanged(this.totalCount())
+    })
+  }
+
+  updateData(data: Array<AntiqueItem>): void {
+    this.dataArray = data
+    this.notifyDataChange()
+  }
+}
+
+// 添加分类标签数据源类
+class CategoryDataSource implements IDataSource {
+  private dataArray: Array<string> = []
+  private listeners: DataChangeListener[] = []
+
+  constructor(data: Array<string>) {
+    this.dataArray = data
+  }
+
+  totalCount(): number {
+    return this.dataArray.length
+  }
+
+  getData(index: number): string {
+    return this.dataArray[index]
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {
+    this.listeners.push(listener)
+  }
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {
+    const index = this.listeners.indexOf(listener)
+    if (index >= 0) {
+      this.listeners.splice(index, 1)
+    }
+  }
+
+  notifyDataChange(): void {
+    this.listeners.forEach(listener => {
+      listener.onDataChanged(this.totalCount())
+    })
+  }
+
+  updateData(data: Array<string>): void {
+    this.dataArray = data
+    this.notifyDataChange()
+  }
+}
+
 @Entry
 @Component
 export default struct Antique {
   @State searchText: string = ''
   @State selectedCategory: string = '全部'
   @State antiqueList: Array<AntiqueItem> = []
+  @State filteredList: Array<AntiqueItem> = []
   @State isSearching: boolean = false
+  @State private dataSource: AntiqueDataSource = new AntiqueDataSource([])
+  @State private categoryDataSource: CategoryDataSource = new CategoryDataSource([])
 
   private categories: Array<string> = ['全部', '唐', '宋', '元', '明', '清', '杂项']
   private categoryKeywordsMap: Record<string, Array<string>> = {
-    '唐': ['唐', '唐朝', '唐代'],
-    '宋': ['宋', '宋朝'],
-    '元': ['元', '元朝'],
-    '明': ['明', '明朝'],
-    '清': ['清', '清朝']
+    '唐': [ '唐朝', '唐代'],
+    '宋': [ '宋朝'],
+    '元': [ '元朝'],
+    '明': [ '明朝'],
+    '清': [ '清朝']
   }
 
   aboutToAppear(): void {
     this.fetchData()
+    // 初始化分类标签数据源
+    this.categoryDataSource.updateData(this.categories)
   }
 
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://localhost:3000/api/antique/list?ts=${Date.now()}`,
+      `http://192.168.1.100:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
-          const newList: AntiqueItem[] = JSON.parse(data.result)
-          this.antiqueList.splice(0, this.antiqueList.length, ...newList)
-          console.log('最新antiqueList:', this.antiqueList)
+          try {
+            const newList: AntiqueItem[] = JSON.parse(data.result)
+            console.info('[Antique] 获取到文物数据，数量:', newList.length)
+            this.antiqueList = newList
+            this.updateFilteredData()
+          } catch (e) {
+            console.error('[Antique] 解析数据失败:', e)
+          }
         } else {
-          console.error('请求错误或数据格式不正确:', err)
+          console.error('[Antique] 请求错误:', err)
         }
       }
     )
@@ -67,8 +157,7 @@ export default struct Antique {
 
   getFilteredList(): Array<AntiqueItem> {
     const search: string = this.searchText.trim().toLowerCase()
-
-    return this.antiqueList.filter(item => {
+    const filteredList = this.antiqueList.filter(item => {
       const nameMatch: boolean = item.name.toLowerCase().includes(search)
 
       const isInCategory: boolean = (() => {
@@ -86,14 +175,24 @@ export default struct Antique {
 
       return nameMatch && isInCategory
     })
+
+    console.info(`[Antique] 过滤结果: 搜索="${search}", 分类="${this.selectedCategory}", 结果数量=${filteredList.length}`)
+    return filteredList
   }
+
+  private updateFilteredData(): void {
+    this.filteredList = this.getFilteredList()
+    this.dataSource.updateData(this.filteredList)
+    this.dataSource.notifyDataChange()
+  }
+
   // 添加点赞处理函数
     private handleLike(item: AntiqueItem): void {
     // 1. 乐观更新：本地先+1，UI立即变化
     item.like_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://localhost:3000/api/antique/like/${item.id}`,
+      `http://192.168.1.100:3000/api/antique/like/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         let response: LikeResponse | null = null
@@ -229,7 +328,6 @@ export default struct Antique {
 
   build() {
     Column() {
-      // 固定顶部：搜索框 + 分类标签
       // 搜索框区域
       Row() {
         Image($r('app.media.find_same'))
@@ -247,7 +345,10 @@ export default struct Antique {
           placeholder: '搜索文物名称',
           text: this.searchText
         })
-          .onChange((value: string) => this.searchText = value)
+          .onChange((value: string) => {
+            this.searchText = value
+            this.updateFilteredData()
+          })
           .backgroundColor('#FFFFFF')
           .borderRadius(8)
           .padding(8)
@@ -259,9 +360,10 @@ export default struct Antique {
       .border({ width: 1, color: '#CCCCCC' })
       .borderRadius(8)
       .alignItems(VerticalAlign.Center)
-      // 分类标签栏（每项：图标在上，文字在下）
+
+      // 分类标签栏
       Row({ space: 8 }) {
-        ForEach(this.categories, (cat: string) => {
+        LazyForEach(this.categoryDataSource, (cat: string) => {
           Column() {
             Image(
               cat === '全部' ? $r('app.media.tag_all') :
@@ -272,9 +374,9 @@ export default struct Antique {
                         cat === '清'   ? $r('app.media.tag_qing') :
                         $r('app.media.tag_misc')
             )
-              .width(25)
-              .height(24)
-              .margin({ bottom: 4 })
+            .width(25)
+            .height(24)
+            .margin({ bottom: 4 })
 
             Text(cat)
               .fontSize(12)
@@ -288,14 +390,18 @@ export default struct Antique {
             color: this.selectedCategory === cat ? '#DAA520' : 'transparent'  // 选中时加边框
           })
           .borderRadius(20)
-          .onClick(() => this.selectedCategory = cat)
-        },(cat:string)=>cat)
+          .onClick(() => {
+            this.selectedCategory = cat
+            this.updateFilteredData()
+          })
+        }, (cat: string) => cat)
       }
       .margin({ left: 1, right: 1, bottom: 10 })
-      // ✅ 滚动区域：文物卡片列表
-      Scroll() {
-        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
-          ForEach(this.getFilteredList(), (item: AntiqueItem) => {
+
+      // 列表部分
+      List() {
+        LazyForEach(this.dataSource, (item: AntiqueItem) => {
+          ListItem() {
             Column() {
               // 文物图片
               Image(item.image)
@@ -330,14 +436,7 @@ export default struct Antique {
               .justifyContent(FlexAlign.SpaceBetween)
               .padding({ left: 8, right: 8 })
             }
-            .width('48%')  // 宽度略小于 50%，留出间距
-            .padding({
-              left: 12,
-              right: 12,
-              top: 0,
-              bottom: 12
-            })
-            .width('48%')
+            .width('100%')
             .padding(10)
             .backgroundColor('#FFFFFF')
             .borderRadius(10)
@@ -350,10 +449,12 @@ export default struct Antique {
                 console.error(`跳转失败: ${err.message}`)
               })
             })
-          }, (item: AntiqueItem) => item.id.toString())
-        }
-        .width('100%')
+          }
+        }, (item: AntiqueItem) => item.id.toString())
       }
+      .lanes(2)
+      .padding(16)
+      .cachedCount(6)
       .flexGrow(1)
     }
     .width('100%')
