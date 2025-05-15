@@ -95,7 +95,7 @@ export default struct Antique {
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://localhost:3000/api/antique/list?ts=${Date.now()}`,
+      `http://10.4.77.43:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
@@ -147,12 +147,12 @@ export default struct Antique {
   }
 
   // 添加点赞处理函数
-    private handleLike(item: AntiqueItem): void {
+  private handleLike(item: AntiqueItem): void {
     // 1. 乐观更新：本地先+1，UI立即变化
     item.like_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://localhost:3000/api/antique/like/${item.id}`,
+      `http://10.4.77.43:3000/api/antique/like/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         let response: LikeResponse | null = null
@@ -192,7 +192,7 @@ export default struct Antique {
     item.views_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://localhost:3000/api/antique/views/${item.id}`,
+      `http://10.4.77.43:3000/api/antique/views/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         if (err) {
@@ -242,8 +242,9 @@ export default struct Antique {
         fs.copyFileSync(resultPhoto.fd, fileTemp.fd);
         fs.closeSync(resultPhoto);
         fs.closeSync(fileTemp);
+        console.info('开始上传图片，图片URI:', imageUri_1);
 
-        const uploadUrl: string = 'http://10.4.9.217:5000/search_similar';
+        const uploadUrl: string = 'http://10.4.77.43:5000/search_similar';
         const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
           method: http.RequestMethod.POST,
           header: {

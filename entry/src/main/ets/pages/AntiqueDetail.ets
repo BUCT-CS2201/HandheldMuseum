@@ -3,6 +3,9 @@ import router from '@ohos.router';
 import prompt from '@ohos.prompt';
 import common from '@ohos.app.ability.common';
 import { UserStore } from '../common/UserStore';
+import preferences from '@ohos.data.preferences';
+import picker from '@ohos.file.picker'
+import fs from '@ohos.file.fs'
 
 // 路由参数类型
 interface RouterParams {
@@ -52,13 +55,18 @@ interface CommentItem {
   is_deleted: number;
 }
 
-interface CommentStatusResult {
-  comment_status: number;
-  name: string;
+interface CommentID {
+  comment_id: number;
 }
 
+interface CommentResult {
+  result:CommentID;
+}
+
+// 定义 FetchResult 接口
 interface FetchResult {
-  result: string | object;
+    result: string | object; // 结果可以是字符串或对象
+    comment_id?: number; // 可选属性
 }
 
 interface RelicStatus {
@@ -80,6 +88,17 @@ class CommentTreeItem {
     this.comment = comment;
     this.replies = replies;
   }
+}
+
+interface GeneratedTypeLiteralInterface_1 {
+  name: string;
+  contentType: string;
+  filePath: string;
+  remoteFileName: string;
+}
+
+interface GeneratedTypeLiteralInterface_2 {
+  comment_id: number;
 }
 
 @Entry
@@ -108,8 +127,11 @@ struct AntiqueDetail {
   @State favoriteCount: number = 0;
   @State isLiked: boolean = false;
   @State isFavorited: boolean = false;
+  @State selectedImages: string[] = []; // 用于存储选择的图片URI
+  private userPreferences: preferences.Preferences | null = null;
 
   aboutToAppear() {
+    this.initPreferences();
     const params = router.getParams() as RouterParams;
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
     console.log('aboutToAppear被调用，relicId:', relicId);
@@ -117,6 +139,14 @@ struct AntiqueDetail {
       this.fetchAntiqueDetail(relicId);
       this.fetchComments(relicId);
       this.checkLikeAndFavoriteStatus();
+    }
+  }
+
+  async initPreferences() {
+    try {
+      this.userPreferences = await preferences.getPreferences(getContext(), 'userInfo');
+    } catch (error) {
+      console.error('初始化偏好设置失败:', error);
     }
   }
 
@@ -209,7 +239,7 @@ struct AntiqueDetail {
   fetchComments(id: number): void {
     console.log('fetchComments被调用，id:', id);
     const httpRequest = http.createHttp();
-    const url = `http://localhost:3000/api/antique/comments/${id}`;
+    const url = `http://10.4.77.43:3000/api/antique/comments/${id}`;
     httpRequest.request(
       url,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
@@ -242,70 +272,128 @@ struct AntiqueDetail {
     );
   }
 
-  submitComment(): void {
-    const params = router.getParams() as RouterParams;
-    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
-    const userId = UserStore.userId;
+  async getUserId(): Promise<number> {
+    if( !this.userPreferences )
+      return 0 ;
+    try {
+      const userId: number = await this.userPreferences.get('userId', 0) as number;
+      return userId; // 返回用户ID
+    } catch (error) {
+      console.error('获取用户ID失败:', error);
+      return 0; // 返回0表示未获取到用户ID
+    }
+  }
 
+  // 处理图片选择
+  async handleImageSearch(): Promise<void> {
+    try {
+      const photoPicker: picker.PhotoViewPicker = new picker.PhotoViewPicker();
+      const options: picker.PhotoSelectOptions = {
+        MIMEType: picker.PhotoViewMIMETypes.IMAGE_TYPE,
+        maxSelectNumber: 9 // 最多选择9张图片
+      };
+      const result: picker.PhotoSelectResult = await photoPicker.select(options);
+
+      if (result && result.photoUris && result.photoUris.length > 0) {
+        this.selectedImages = result.photoUris; // 存储选择的图片URI
+        console.info('选择的图片:', this.selectedImages);
+      } else {
+        console.info('没有选择任何图片');
+      }
+    } catch (error) {
+      console.error('选择图片失败:', error);
+    }
+  }
+
+  // 提交评论
+  async submitComment(): Promise<void> {
+    const userId = await this.getUserId(); // 获取用户ID
     if (!userId) {
-      this.showToast('请先登录');
-      return;
+        this.showToast('请先登录'); // 提示用户登录
+        return; // 退出函数
     }
 
-    // 1. 先查评论状态
-    const httpRequest = http.createHttp();
-    httpRequest.request(
-      `http://localhost:3000/api/user/comment_status/${userId}`,
-      { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
-      (err: Error | undefined, data: FetchResult) => {
-        let resultObj: CommentStatusResult | null = null;
-        if (err) {
-          this.showToast('查询评论状态失败');
-          return;
-        }
-        if (typeof data.result === 'string') {
-          resultObj = JSON.parse(data.result) as CommentStatusResult;
-        } else if (typeof data.result === 'object') {
-          resultObj = data.result as CommentStatusResult;
-        }
-        if (!resultObj || resultObj.comment_status !== 1) {
-          this.showToast('您已被禁止评论');
-          return;
-        }
-        // 2. 允许评论，提交评论
-        if (relicId > 0 && this.commentContent) {
-          const httpRequest2 = http.createHttp();
-          const url = `http://localhost:3000/api/antique/comments/${relicId}`;
-          httpRequest2.request(
-            url,
-            {
-              method: http.RequestMethod.POST,
-              header: { 'Content-Type': 'application/json' },
-              expectDataType: http.HttpDataType.OBJECT,
-              extraData: JSON.stringify({
+    const params = router.getParams() as RouterParams;
+    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
+    if (relicId > 0 && this.commentContent) {
+        const httpRequest2 = http.createHttp();
+        const url = `http://10.4.77.43:3000/api/antique/upload_comments/${relicId}`; // 确保包含 relicId
+        const response: FetchResult = await httpRequest2.request(url, {
+            method: http.RequestMethod.POST,
+            header: { 'Content-Type': 'application/json' },
+            expectDataType: http.HttpDataType.OBJECT,
+            extraData: JSON.stringify({
                 user_id: userId,
                 content: this.commentContent,
                 parent_id: this.replyParentId || null
-              })
-            },
-            (err2: Error | undefined, data2: FetchResult) => {
-              if (err2) {
-                this.showToast('提交评论失败');
-                return;
-              }
-              this.showToast('评论已提交，审核通过后将显示');
-              this.commentContent = '';
-              this.replyParentId = null;
-            }
-          );
+            })
+        }) as FetchResult;
+
+        // 确保 response.result 是一个对象并包含 comment_id
+        if (response && response.result && typeof response.result === 'object') {
+            const commentId = (response.result as GeneratedTypeLiteralInterface_2).comment_id; // 使用类型断言
+            // 上传图片并与评论ID关联
+            await this.uploadImagesWithCommentId(commentId);
+            this.showToast('评论已提交，审核通过后将显示');
+            this.commentContent = '';
+            this.replyParentId = null;
+            this.selectedImages = []; // 清空选择的图片
+            console.info(commentId.toString());
+        } else {
+            this.showToast('提交评论失败');
         }
-      }
-    );
+    }
   }
 
-  likeComment(comment_id: number): void {
+  // 上传图片并与评论ID关联
+  async uploadImagesWithCommentId(commentId: number): Promise<void> {
+    const userId = await this.getUserId(); // 获取用户ID
+    if (this.selectedImages.length === 0) {
+        return; // 没有选择图片
+    }
+
+    const uploadUrl: string = 'http://10.4.77.43:5000/upload_image'; // 假设这是上传图片的接口
+    const httpRequest: http.HttpRequest = http.createHttp();
+
+    this.selectedImages.map( async (imageUri) => {
+        let resultPhoto = fs.openSync(imageUri, fs.OpenMode.READ_ONLY);
+        let fileTemp = fs.openSync(getContext().filesDir + resultPhoto.name, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
+        let imageUri_1: string = fileTemp.path;
+        fs.copyFileSync(resultPhoto.fd, fileTemp.fd);
+        fs.closeSync(resultPhoto);
+        fs.closeSync(fileTemp)
+        console.info('开始上传图片，图片URI:', imageUri_1);
+
+        const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
+          method: http.RequestMethod.POST,
+          header: {
+            'Content-Type': 'multipart/form-data',
+            'Connection': 'keep-alive',
+            'user_id': userId.toString(), // 将 userId 添加到请求头
+            'comment_id': commentId.toString() // 将 commentId 添加到请求头
+          },
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          multiFormDataList: [
+            {
+              name: 'image',  // 确保字段名为 'image'
+              contentType: 'image/jpeg',
+              filePath: imageUri_1,
+              remoteFileName: 'file.jpg'
+            },
+          ],
+        });
+
+    });
+  }
+
+  async likeComment(comment_id: number): Promise<void> {
+    const userId = await this.getUserId(); // 获取用户ID
+    if (!userId) {
+      this.showToast('请先登录'); // 提示用户登录
+      return; // 退出函数
+    }
     const httpRequest = http.createHttp();
-    const url = `http://localhost:3000/api/antique/comments/like/${comment_id}`;
+    const url = `http://10.4.77.43:3000/api/antique/comments/like/${comment_id}`;
     httpRequest.request(
       url,
       {
@@ -315,7 +403,7 @@ struct AntiqueDetail {
         },
         expectDataType: http.HttpDataType.OBJECT,
         extraData: JSON.stringify({
-          user_id: 1 // 这里需要替换为实际的用户ID
+          user_id: userId
         })
       },
       (err: Error | undefined, data: FetchResult) => {
@@ -328,16 +416,20 @@ struct AntiqueDetail {
     );
   }
 
-  likeAntique(): void {
+  async likeAntique(): Promise<void> {
+    const userId = await this.getUserId(); // 获取用户ID
+    if (!userId) {
+      this.showToast('请先登录'); // 提示用户登录
+      return; // 退出函数
+    }
     const params = router.getParams() as RouterParams;
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
-    const userId = 1; // 替换为实际登录用户ID
 
     console.log('准备发送点赞请求，relicId:', relicId, 'userId:', userId);
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/antique/like/${relicId}`,
+      `http://10.4.77.43:3000/api/antique/like/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -369,11 +461,15 @@ struct AntiqueDetail {
   favoriteAntique(): void {
     const params = router.getParams() as RouterParams;
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
-    const userId = 1; // 替换为实际登录用户ID
+    const userId = this.getUserId(); // 获取用户ID
+    if (!userId) {
+      this.showToast('请先登录'); // 提示用户登录
+      return; // 退出函数
+    }
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/antique/favorite/${relicId}`,
+      `http://10.4.77.43:3000/api/antique/favorite/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -398,11 +494,15 @@ struct AntiqueDetail {
   checkLikeAndFavoriteStatus(): void {
     const params = router.getParams() as RouterParams;
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
-    const userId = 1; // 替换为实际登录用户ID
+    const userId = this.getUserId(); // 获取用户ID
+    if (!userId) {
+      this.showToast('请先登录'); // 提示用户登录
+      return; // 退出函数
+    }
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/antique/status/${relicId}?user_id=${userId}`,
+      `http://10.4.77.43:3000/api/antique/status/${relicId}?user_id=${userId}`,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
       (err: Error | undefined, data: FetchResult) => {
         if (err) {
@@ -624,9 +724,10 @@ struct AntiqueDetail {
                       // 评论区域
                       Column() {
                         Text('评论')
-                          .fontSize(16)
+                          .fontSize(20)
                           .fontWeight(FontWeight.Bold)
-                          .margin({ top: 12, left: 12, bottom: 4 })
+                          .margin({ top: 12, left: 12, bottom: 8 })
+                          .fontColor('#333333');
 
                         // 评论列表容器
                         Column() {
@@ -636,11 +737,12 @@ struct AntiqueDetail {
                               Row() {
                                 Column() {
                                   Text(item.comment.user_name)
-                                    .fontSize(12)
+                                    .fontSize(14)
                                     .fontWeight(FontWeight.Bold)
+                                    .fontColor('#007BFF');
                                   Text(item.comment.create_time)
-                                    .fontSize(10)
-                                    .fontColor('#666666')
+                                    .fontSize(12)
+                                    .fontColor('#666666');
                                 }
                                 .flexGrow(1)
 
@@ -648,46 +750,50 @@ struct AntiqueDetail {
                                 Row() {
                                   Text(item.comment.like_count.toString())
                                     .fontSize(12)
-                                    .margin({ right: 4 })
+                                    .margin({ right: 4 });
                                   Button('点赞')
                                     .onClick(() => {
-                                      this.likeComment(item.comment.comment_id)
+                                      this.likeComment(item.comment.comment_id);
                                     })
-                                    .width(50)
-                                    .height(25)
+                                    .width(60)
+                                    .height(30)
                                     .backgroundColor('#F5F5F5')
-                                    .borderRadius(12)
+                                    .borderRadius(15)
                                     .fontSize(12)
-                                    .fontColor('#666666')
+                                    .fontColor('#666666');
                                 }
                               }
                               .margin({ bottom: 8 })
+                              .padding(10)
+                              .backgroundColor('#FFFFFF')
+                              .borderRadius(10)
 
                               // 评论内容
                               Text(item.comment.content)
-                                .fontSize(12)
+                                .fontSize(14)
                                 .lineHeight(20)
                                 .fontColor('#444444')
-                                .margin({ top: 4, left: 44, right: 12 })
+                                .margin({ top: 4, left: 12, right: 12 });
+
                               // 回复按钮
                               Button('回复')
                                 .onClick(() => {
                                   this.replyParentId = item.comment.comment_id;
                                   this.commentContent = `@${item.comment.user_name} `;
                                 })
-                                .width(50)
-                                .height(25)
+                                .width(60)
+                                .height(30)
                                 .backgroundColor('#F5F5F5')
-                                .borderRadius(12)
+                                .borderRadius(15)
                                 .fontSize(12)
                                 .fontColor('#666666')
-                                .margin({ left: 44 })
+                                .margin({ left: 12, top: 4 });
                             }
                             .margin({ bottom: 12 })
-                            .backgroundColor('#FFFFFF')
+                            .backgroundColor('#F9F9F9')
                             .borderRadius(10)
-                            .padding(10)
-
+                            .padding(10);
+                            
                             // 子评论
                             ForEach(item.replies, (reply: CommentItem) => {
                               Column() {
@@ -696,9 +802,10 @@ struct AntiqueDetail {
                                     Text(reply.user_name)
                                       .fontSize(12)
                                       .fontWeight(FontWeight.Bold)
+                                      .fontColor('#007BFF');
                                     Text(reply.create_time)
                                       .fontSize(10)
-                                      .fontColor('#666666')
+                                      .fontColor('#666666');
                                   }
                                   .flexGrow(1)
 
@@ -706,61 +813,41 @@ struct AntiqueDetail {
                                   Row() {
                                     Text(reply.like_count.toString())
                                       .fontSize(12)
-                                      .margin({ right: 4 })
+                                      .margin({ right: 4 });
                                     Button('点赞')
                                       .onClick(() => {
-                                        this.likeComment(reply.comment_id)
+                                        this.likeComment(reply.comment_id);
                                       })
-                                      .width(50)
-                                      .height(25)
+                                      .width(60)
+                                      .height(30)
                                       .backgroundColor('#F5F5F5')
-                                      .borderRadius(12)
+                                      .borderRadius(15)
                                       .fontSize(12)
-                                      .fontColor('#666666')
+                                      .fontColor('#666666');
                                   }
                                 }
                                 .margin({ bottom: 8 })
+                                .padding(10)
+                                .backgroundColor('#FFFFFF')
+                                .borderRadius(10)
 
                                 // 评论内容
                                 Text(reply.content)
                                   .fontSize(12)
                                   .lineHeight(20)
                                   .fontColor('#444444')
-                                  .margin({ top: 4, left: 44, right: 12 })
+                                  .margin({ top: 4, left: 12, right: 12 });
                               }
-                              .margin({ bottom: 12, left: 30 }) // 子评论缩进
-                              .backgroundColor('#FFFFFF')
+                              .margin({ bottom: 12, left: 30 })
+                              .backgroundColor('#F9F9F9')
                               .borderRadius(10)
-                              .padding(10)
-                            })
+                              .padding(10);
+                            });
                           })
                         }
                         .width('100%')
                         .backgroundColor('#F5F5F5')
-                        .padding(12)
-
-                        // 新增：所有评论过此文物的用户及内容
-                        Text('所有评论过此文物的用户及内容如下：')
-                          .fontSize(14)
-                          .fontWeight(FontWeight.Bold)
-                          .margin({ top: 16, left: 12, bottom: 4 })
-                        Column() {
-                          ForEach(this.comments, (comment: CommentItem) => {
-                            Row() {
-                              Text(comment.user_name)
-                                .fontSize(12)
-                                .fontWeight(FontWeight.Bold)
-                                .margin({ right: 8 })
-                              Text(comment.content)
-                                .fontSize(12)
-                                .fontColor('#444444')
-                            }
-                            .margin({ bottom: 6, left: 16 })
-                          })
-                        }
-                        .width('100%')
-                        .backgroundColor('#F9F9F9')
-                        .padding(8)
+                        .padding(12);
                       }
                     }
                   }
@@ -770,10 +857,22 @@ struct AntiqueDetail {
 
               // 固定底部栏
               Row({ space: 8 }) {
+                // 选择图片按钮
+                Button('选择图片')
+                  .onClick(() => {
+                    this.handleImageSearch(); // 处理图片选择
+                  })
+                  .width(80)
+                  .height(40)
+                  .backgroundColor('#DAA520')
+                  .borderRadius(20)
+                  .fontSize(14)
+                  .fontColor('#FFFFFF');
+
                 // 评论输入框
                 TextInput({ placeholder: '发表评论...' })
                   .onChange((value: string) => {
-                    this.commentContent = value
+                    this.commentContent = value;
                   })
                   .type(InputType.Normal)
                   .height(40)
@@ -781,39 +880,39 @@ struct AntiqueDetail {
                   .padding({ left: 12 })
                   .backgroundColor('#FFFFFF')
                   .margin({ left: 12 })
-                  .width('200.00vp')
+                  .width('200.00vp');
 
                 // 评论按钮
                 Button('评论')
                   .onClick(() => {
-                    this.submitComment()
+                    this.submitComment();
                   })
                   .width(60)
                   .height(40)
                   .backgroundColor('#DAA520')
                   .borderRadius(20)
                   .fontSize(14)
-                  .fontColor('#FFFFFF')
+                  .fontColor('#FFFFFF');
 
                 // 点赞按钮+数字
                 Row({ space: 4 }) {
                   Button({ type: ButtonType.Circle }) {
                     Image(this.isLiked ? $r('app.media.like_filled') : $r('app.media.like'))
                       .width(24)
-                      .height(24)
+                      .height(24);
                   }
                   .onClick(() => this.likeAntique())
                   .width(40)
                   .height(40)
-                  .backgroundColor('#F5F5F5')
+                  .backgroundColor('#F5F5F5');
 
                   Text(this.likeCount.toString())
                     .fontSize(16)
                     .fontColor('#666666')
                     .width(32)
-                    .textAlign(TextAlign.Center)
+                    .textAlign(TextAlign.Center);
                 }
-                .padding({ right: 12 })
+                .padding({ right: 12 });
               }
               .width('100%')
               .height(56)

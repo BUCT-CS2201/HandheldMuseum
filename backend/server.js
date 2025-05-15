@@ -3,6 +3,7 @@ const path = require('path'); // 添加这一行
 const antiqueRoutes = require('./routes/antique')
 const museumRoutes = require('./routes/Museum')
 const dynamicRoutes = require('./routes/Dynamic')
+const userRoutes = require('./routes/user')
 const cors = require('cors')
 
 const app = express()
@@ -18,6 +19,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/antique', antiqueRoutes)
 app.use('/api/museum', museumRoutes)
 app.use('/api/dynamic', dynamicRoutes)
+app.use('/api/user',userRoutes)
 
 app.listen(PORT, () => {
     console.log(`✅ 后端服务已启动: http://localhost:${PORT}`)
