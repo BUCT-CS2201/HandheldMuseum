@@ -95,7 +95,7 @@ export default struct Antique {
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://10.4.9.217:3000/api/antique/list?ts=${Date.now()}`,
+      `http://localhost:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
@@ -152,7 +152,7 @@ export default struct Antique {
     item.like_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://10.4.9.217:3000/api/antique/like/${item.id}`,
+      `http://localhost:3000/api/antique/like/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         let response: LikeResponse | null = null
@@ -192,7 +192,7 @@ export default struct Antique {
     item.views_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://10.4.9.217:3000/api/antique/views/${item.id}`,
+      `http://localhost:3000/api/antique/views/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         if (err) {

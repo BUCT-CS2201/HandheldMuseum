@@ -100,7 +100,7 @@ struct MuseumDetail {
   fetchMuseumDetail(museumId: number) {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      `http://192.168.1.100:3000/api/museum/detail/${museumId}`,
+      `http://localhost:3000/api/museum/detail/${museumId}`,
       {
         method: http.RequestMethod.GET,
       },
@@ -132,7 +132,7 @@ struct MuseumDetail {
   fetchMuseumRelics(museumId: number) {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      `http://192.168.1.100:3000/api/museum/relics/${museumId}`,
+      `http://localhost:3000/api/museum/relics/${museumId}`,
       {
         method: http.RequestMethod.GET,
       },
@@ -279,9 +279,9 @@ struct MuseumDetail {
                   .width('100%')
                   .margin({ top: 20, bottom: 16 })
 
-                Scroll() {
-                  Row() {
-                    LazyForEach(new RelicDataSource(this.relics), (item: RelicInfo) => {
+                List({space:5}) {
+                  LazyForEach(new RelicDataSource(this.relics), (item: RelicInfo) => {
+                    ListItem() {
                       Column() {
                         Image(item.relic_image)
                           .width(120)
@@ -300,28 +300,26 @@ struct MuseumDetail {
                           .margin({ top: 8 })
                       }
                       .width(120)
-                      .margin({ right: 16 })
                       .onClick(() => {
                         router.pushUrl({
-                          url: 'pages/RelicDetail',
-                          params: {
-                            relicId: item.relic_id
-                          }
-                        });
+                          url: 'pages/AntiqueDetail',
+                          params: { id: item.relic_id.toString() }
+                        }).catch((err: BusinessError) => {
+                          console.error(`跳转失败: ${err.message}`)
+                        })
                       })
-                    }, (item: RelicInfo): string => item.relic_id.toString())
-                  }
-                  .padding({ left: 20, right: 20 })
+                    }
+                  }, (item: RelicInfo): string => item.relic_id.toString())
                 }
-                .scrollable(ScrollDirection.Horizontal)
-                .scrollBar(BarState.Off)
-                .edgeEffect(EdgeEffect.Spring)
+                .width('100%')
+                .padding({ bottom: 20 })
+                .listDirection(Axis.Horizontal)
+                .cachedCount(5)
               }
               .width('100%')
               .backgroundColor('#FFFFFF')
               .borderRadius(16)
               .margin({ top: 16 })
-              .padding({ bottom: 20 })
             }
           }
           .width('100%')

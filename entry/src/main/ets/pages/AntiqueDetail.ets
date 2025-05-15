@@ -129,7 +129,7 @@ struct AntiqueDetail {
 
   fetchAntiqueDetail(id: number): void {
     const httpRequest = http.createHttp();
-    const url = `http://192.168.1.100:3000/api/antique/detail/${id}`;
+    const url = `http://localhost:3000/api/antique/detail/${id}`;
     console.log('请求的URL:', url);
 
     httpRequest.request(
@@ -209,7 +209,7 @@ struct AntiqueDetail {
   fetchComments(id: number): void {
     console.log('fetchComments被调用，id:', id);
     const httpRequest = http.createHttp();
-    const url = `http://192.168.1.100:3000/api/antique/comments/${id}`;
+    const url = `http://localhost:3000/api/antique/comments/${id}`;
     httpRequest.request(
       url,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
@@ -255,7 +255,7 @@ struct AntiqueDetail {
     // 1. 先查评论状态
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://192.168.1.100:3000/api/user/comment_status/${userId}`,
+      `http://localhost:3000/api/user/comment_status/${userId}`,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
       (err: Error | undefined, data: FetchResult) => {
         let resultObj: CommentStatusResult | null = null;
@@ -275,7 +275,7 @@ struct AntiqueDetail {
         // 2. 允许评论，提交评论
         if (relicId > 0 && this.commentContent) {
           const httpRequest2 = http.createHttp();
-          const url = `http://192.168.1.100:3000/api/antique/comments/${relicId}`;
+          const url = `http://localhost:3000/api/antique/comments/${relicId}`;
           httpRequest2.request(
             url,
             {
@@ -305,7 +305,7 @@ struct AntiqueDetail {
 
   likeComment(comment_id: number): void {
     const httpRequest = http.createHttp();
-    const url = `http://192.168.1.100:3000/api/antique/comments/like/${comment_id}`;
+    const url = `http://localhost:3000/api/antique/comments/like/${comment_id}`;
     httpRequest.request(
       url,
       {
@@ -337,7 +337,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://192.168.1.100:3000/api/antique/like/${relicId}`,
+      `http://localhost:3000/api/antique/like/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -373,7 +373,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://192.168.1.100:3000/api/antique/favorite/${relicId}`,
+      `http://localhost:3000/api/antique/favorite/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -402,7 +402,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://192.168.1.100:3000/api/antique/status/${relicId}?user_id=${userId}`,
+      `http://localhost:3000/api/antique/status/${relicId}?user_id=${userId}`,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
       (err: Error | undefined, data: FetchResult) => {
         if (err) {
