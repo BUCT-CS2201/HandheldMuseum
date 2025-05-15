@@ -39,6 +39,7 @@ export class CommentItem {
   time: string;
   parent_id?: number;
   reply_count: number;
+  replies: CommentItem[];
 
   constructor(
     id: number,
@@ -46,7 +47,8 @@ export class CommentItem {
     content: string,
     time: string,
     parent_id?: number,
-    reply_count: number = 0
+    reply_count: number = 0,
+    replies: CommentItem[] = []
   ) {
     this.id = id;
     this.user = user;
@@ -54,6 +56,7 @@ export class CommentItem {
     this.time = time;
     this.parent_id = parent_id;
     this.reply_count = reply_count;
+    this.replies = replies;
   }
 }
 
@@ -68,18 +71,20 @@ export class DynamicItem {
   images: string[];
   comments: CommentItem[];
   showComments: boolean;
+  reply_count: number;
 
   constructor(
     id: number,
     username: string,
     content: string,
     isoTime: string,
-    likes: number = 0, // ✅ 设置默认值
+    likes: number = 0,
     images: string[],
     comments: CommentItem[] = [],
     isLiked: boolean = false,
     avatar: Resource = $r("app.media.default_avatar"),
-    showComments: boolean = false
+    showComments: boolean = false,
+    reply_count: number = 0
   ) {
     this.id = id;
     this.username = username;
@@ -91,6 +96,7 @@ export class DynamicItem {
     this.isLiked = isLiked;
     this.avatar = avatar;
     this.showComments = showComments;
+    this.reply_count = reply_count;
   }
 
   private formatTime(isoTime: string): string {

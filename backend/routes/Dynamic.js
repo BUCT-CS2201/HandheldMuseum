@@ -49,42 +49,31 @@ router.post('/publish', async (req, res) => {
     return res.status(400).json({ error: '内容或图片至少需要一项' })
   }
 
-  let connection // 用于保存数据库连接
   try {
-    // 1. 开启事务
-    connection = await mysqlService.beginTransaction()
-
-    // 2. 创建评论记录
+    // 1. 创建评论记录
     const commentSql = `
       INSERT INTO relic_comment
       (relic_id, user_id, content, parent_id, status, like_count, reply_count)
       VALUES (0, ?, ?, NULL, 0, 0, 0)
     `
-    const commentResult = await connection.query(commentSql, [user_id, content])
+    const commentResult = await mysqlService.query(commentSql, [user_id, content])
     const commentId = commentResult.insertId
 
-    // 3. 关联图片与评论
+    // 2. 关联图片与评论
     if (image_ids && image_ids.length > 0) {
       const updateImageSql = `
         UPDATE user_image
         SET comment_id = ?
         WHERE image_id IN (?)
       `
-      await connection.query(updateImageSql, [commentId, image_ids])
+      await mysqlService.query(updateImageSql, [commentId, image_ids])
     }
-
-    // 4. 提交事务
-    await mysqlService.commit(connection)
 
     res.json({
       comment_id: commentId,
       message: '动态发布成功，等待审核'
     })
   } catch (err) {
-    // 5. 回滚事务
-    if (connection) {
-      await mysqlService.rollback(connection)
-    }
     console.error('动态发布失败:', err)
     res.status(500).json({ error: '动态发布失败' })
   }
@@ -314,6 +303,9 @@ router.post('/upload/image', upload.single('image'), async (req, res) => {
 router.get('/comments/:dynamicId', async (req, res) => {
   try {
     const { dynamicId } = req.params;
+    console.log('获取评论列表，动态ID:', dynamicId);
+    
+    // 修改SQL查询，获取所有相关评论
     const sql = `
       SELECT 
         c.comment_id,
@@ -328,15 +320,48 @@ router.get('/comments/:dynamicId', async (req, res) => {
       WHERE c.relic_id = 0 
       AND c.is_deleted = 0
       AND c.status = 1
-      AND c.parent_id = ?
-      ORDER BY c.create_time DESC
+      AND (c.parent_id = ? OR c.comment_id = ?)
+      ORDER BY c.create_time ASC
     `;
     
-    const comments = await mysqlService.query(sql, [dynamicId]);
-    res.json(comments);
+    console.log('执行查询SQL:', sql, [dynamicId, dynamicId]);
+    const comments = await mysqlService.query(sql, [dynamicId, dynamicId]);
+    console.log('查询结果:', comments);
+    
+    // 处理评论层级关系
+    const commentMap = new Map();
+    const rootComments = [];
+
+    // 首先将所有评论放入Map
+    comments.forEach(comment => {
+      commentMap.set(comment.comment_id, {
+        ...comment,
+        replies: []
+      });
+    });
+
+    // 构建评论树
+    comments.forEach(comment => {
+      const commentWithReplies = commentMap.get(comment.comment_id);
+      if (comment.parent_id === parseInt(dynamicId)) {
+        // 这是对动态的评论
+        rootComments.push(commentWithReplies);
+      } else if (comment.parent_id) {
+        // 这是对评论的回复
+        const parentComment = commentMap.get(comment.parent_id);
+        if (parentComment) {
+          parentComment.replies.push(commentWithReplies);
+        }
+      }
+    });
+    
+    res.json(rootComments);
   } catch (err) {
-    console.error('获取评论失败:', err);
-    res.status(500).json({ error: '获取评论失败' });
+    console.error('获取评论失败，详细错误:', err);
+    res.status(500).json({ 
+      error: '获取评论失败',
+      details: err.message || '未知错误'
+    });
   }
 });
 
@@ -344,44 +369,79 @@ router.get('/comments/:dynamicId', async (req, res) => {
 router.post('/comment', async (req, res) => {
   const { dynamic_id, user_id, content, parent_id } = req.body;
 
+  console.log('收到评论请求:', { dynamic_id, user_id, content, parent_id });
+
   if (!dynamic_id || !user_id || !content) {
+    console.log('参数不完整:', { dynamic_id, user_id, content });
     return res.status(400).json({ error: '参数不完整' });
   }
 
-  let connection;
   try {
-    connection = await mysqlService.beginTransaction();
+    // 检查动态是否存在
+    const checkDynamicSql = `
+      SELECT comment_id 
+      FROM relic_comment 
+      WHERE comment_id = ? AND relic_id = 0 AND is_deleted = 0
+    `;
+    const [dynamic] = await mysqlService.query(checkDynamicSql, [dynamic_id]);
+    
+    if (!dynamic) {
+      console.log('动态不存在:', dynamic_id);
+      return res.status(404).json({ error: '动态不存在' });
+    }
 
+    // 如果是回复评论，检查父评论是否存在
+    if (parent_id) {
+      const checkParentSql = `
+        SELECT comment_id 
+        FROM relic_comment 
+        WHERE comment_id = ? AND relic_id = 0 AND is_deleted = 0
+      `;
+      const [parent] = await mysqlService.query(checkParentSql, [parent_id]);
+      
+      if (!parent) {
+        console.log('父评论不存在:', parent_id);
+        return res.status(404).json({ error: '父评论不存在' });
+      }
+    }
+
+    // 设置 parent_id
+    let actualParentId = null;
+    if (parent_id) {
+      actualParentId = parent_id;
+    } else {
+      actualParentId = dynamic_id;
+    }
     // 插入评论
     const insertSql = `
       INSERT INTO relic_comment
       (relic_id, user_id, content, parent_id, status, like_count, reply_count)
-      VALUES (0, ?, ?, ?, 0, 0, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
-    const result = await connection.query(insertSql, [user_id, content, parent_id || null]);
+    const params = [0, user_id, content, actualParentId, 1, 0, 0];
+    console.log('执行插入SQL:', insertSql, params);
+    const result = await mysqlService.query(insertSql, params);
+    console.log('插入结果:', result);
 
-    // 如果是回复评论，更新父评论的回复数
-    if (parent_id) {
-      const updateSql = `
-        UPDATE relic_comment
-        SET reply_count = reply_count + 1
-        WHERE comment_id = ?
-      `;
-      await connection.query(updateSql, [parent_id]);
-    }
-
-    await mysqlService.commit(connection);
+    // 更新父评论的回复数
+    const updateSql = `
+      UPDATE relic_comment
+      SET reply_count = reply_count + 1
+      WHERE comment_id = ? AND relic_id = 0
+    `;
+    console.log('执行更新SQL:', updateSql, [actualParentId]);
+    await mysqlService.query(updateSql, [actualParentId]);
 
     res.json({
       comment_id: result.insertId,
-      message: '评论发布成功，等待审核'
+      message: '评论发布成功'
     });
   } catch (err) {
-    if (connection) {
-      await mysqlService.rollback(connection);
-    }
-    console.error('评论发布失败:', err);
-    res.status(500).json({ error: '评论发布失败' });
+    console.error('评论发布失败，详细错误:', err);
+    res.status(500).json({ 
+      error: '评论发布失败',
+      details: err.message || '未知错误'
+    });
   }
 });
 
