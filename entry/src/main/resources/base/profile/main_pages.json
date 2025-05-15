@@ -14,7 +14,7 @@
     "pages/Personal",
     "pages/Settings",
     "pages/DynamicPublish",
-    "pages/UserDynamic"
-
+    "pages/UserDynamic",
+    "pages/SearchResult"
   ]
 }
