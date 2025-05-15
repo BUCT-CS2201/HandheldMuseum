@@ -67,56 +67,16 @@ class AntiqueDataSource implements IDataSource {
   }
 }
 
-// 添加分类标签数据源类
-class CategoryDataSource implements IDataSource {
-  private dataArray: Array<string> = []
-  private listeners: DataChangeListener[] = []
-
-  constructor(data: Array<string>) {
-    this.dataArray = data
-  }
-
-  totalCount(): number {
-    return this.dataArray.length
-  }
-
-  getData(index: number): string {
-    return this.dataArray[index]
-  }
-
-  registerDataChangeListener(listener: DataChangeListener): void {
-    this.listeners.push(listener)
-  }
-
-  unregisterDataChangeListener(listener: DataChangeListener): void {
-    const index = this.listeners.indexOf(listener)
-    if (index >= 0) {
-      this.listeners.splice(index, 1)
-    }
-  }
-
-  notifyDataChange(): void {
-    this.listeners.forEach(listener => {
-      listener.onDataChanged(this.totalCount())
-    })
-  }
-
-  updateData(data: Array<string>): void {
-    this.dataArray = data
-    this.notifyDataChange()
-  }
-}
-
 @Entry
 @Component
 export default struct Antique {
   @State searchText: string = ''
   @State selectedCategory: string = '全部'
+  @State refreshKey: number = 0  // 新增强制刷新Key
   @State antiqueList: Array<AntiqueItem> = []
   @State filteredList: Array<AntiqueItem> = []
   @State isSearching: boolean = false
   @State private dataSource: AntiqueDataSource = new AntiqueDataSource([])
-  @State private categoryDataSource: CategoryDataSource = new CategoryDataSource([])
 
   private categories: Array<string> = ['全部', '唐', '宋', '元', '明', '清', '杂项']
   private categoryKeywordsMap: Record<string, Array<string>> = {
@@ -129,14 +89,12 @@ export default struct Antique {
 
   aboutToAppear(): void {
     this.fetchData()
-    // 初始化分类标签数据源
-    this.categoryDataSource.updateData(this.categories)
   }
 
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://192.168.1.100:3000/api/antique/list?ts=${Date.now()}`,
+      `http://10.4.9.217:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
@@ -184,6 +142,7 @@ export default struct Antique {
     this.filteredList = this.getFilteredList()
     this.dataSource.updateData(this.filteredList)
     this.dataSource.notifyDataChange()
+    this.refreshKey += 1  // 在数据更新后增加refreshKey
   }
 
   // 添加点赞处理函数
@@ -192,7 +151,7 @@ export default struct Antique {
     item.like_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://192.168.1.100:3000/api/antique/like/${item.id}`,
+      `http://10.4.9.217:3000/api/antique/like/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         let response: LikeResponse | null = null
@@ -265,7 +224,7 @@ export default struct Antique {
         fs.closeSync(resultPhoto);
         fs.closeSync(fileTemp);
 
-        const uploadUrl: string = 'http://10.4.59.196:5000/search_similar';
+        const uploadUrl: string = 'http://10.4.9.217:5000/search_similar';
         const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
           method: http.RequestMethod.POST,
           header: {
@@ -363,7 +322,7 @@ export default struct Antique {
 
       // 分类标签栏
       Row({ space: 8 }) {
-        LazyForEach(this.categoryDataSource, (cat: string) => {
+        ForEach(this.categories, (cat: string) => {
           Column() {
             Image(
               cat === '全部' ? $r('app.media.tag_all') :
@@ -393,9 +352,11 @@ export default struct Antique {
           .onClick(() => {
             this.selectedCategory = cat
             this.updateFilteredData()
+            this.refreshKey += 1  // 强制刷新
           })
-        }, (cat: string) => cat)
+        }, (cat: string, index: number) => `${index}-${cat}`)
       }
+      .key(`category-tags-${this.refreshKey}`) // 让整个Row重新渲染
       .margin({ left: 1, right: 1, bottom: 10 })
 
       // 列表部分
@@ -452,6 +413,7 @@ export default struct Antique {
           }
         }, (item: AntiqueItem) => item.id.toString())
       }
+      .key(`antique-list-${this.refreshKey}`)  // 添加key以强制刷新List
       .lanes(2)
       .padding(16)
       .cachedCount(6)
