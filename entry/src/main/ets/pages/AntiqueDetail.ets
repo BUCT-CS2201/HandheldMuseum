@@ -631,113 +631,120 @@ struct AntiqueDetail {
                         // 评论列表容器
                         Column() {
                           ForEach(this.commentTree, (item: CommentTreeItem) => {
-                            Column() {
-                              // 父评论
-                              Row() {
-                                Column() {
-                                  Text(item.comment.user_name)
-                                    .fontSize(12)
-                                    .fontWeight(FontWeight.Bold)
-                                  Text(item.comment.create_time)
-                                    .fontSize(10)
-                                    .fontColor('#666666')
-                                }
-                                .flexGrow(1)
-
-                                // 点赞区域
+                            // 父评论
+                            Row() {
+                              // 头像
+                              Image($r('app.media.avatar_default'))
+                                .width(36).height(36)
+                                .borderRadius(18)
+                                .backgroundColor('#FFF')
+                                .margin({ right: 8 })
+                              // 右侧内容
+                              Column() {
                                 Row() {
-                                  Text(item.comment.like_count.toString())
-                                    .fontSize(12)
-                                    .margin({ right: 4 })
-                                  Button('点赞')
+                                  Text(item.comment.user_name)
+                                    .fontWeight(FontWeight.Bold)
+                                    .fontSize(15)
+                                    .fontColor('#222')
+                                  Text(item.comment.create_time.split('T')[0])
+                                    .fontSize(11)
+                                    .fontColor('#999')
+                                    .margin({ left: 8 })
+                                }
+                                Text(item.comment.content)
+                                  .fontSize(14)
+                                  .fontColor('#222')
+                                  .margin({ top: 2, bottom: 2 })
+                                Row() {
+                                  Button('回复')
                                     .onClick(() => {
-                                      this.likeComment(item.comment.comment_id)
+                                      this.replyParentId = item.comment.comment_id;
+                                      this.commentContent = `@${item.comment.user_name} `;
                                     })
-                                    .width(50)
-                                    .height(25)
-                                    .backgroundColor('#F5F5F5')
-                                    .borderRadius(12)
                                     .fontSize(12)
-                                    .fontColor('#666666')
+                                    .fontColor('#999')
+                                    .backgroundColor('transparent')
+                                    .margin({ right: 8 })
+                                  // 展开回复
+                                  if (item.replies.length > 0) {
+                                    Button(`展开${item.replies.length}条回复`)
+                                      .onClick(() => { /* 展开逻辑 */ })
+                                      .fontSize(12)
+                                      .fontColor('#1E90FF')
+                                      .backgroundColor('transparent')
+                                  }
                                 }
                               }
-                              .margin({ bottom: 8 })
-
-                              // 评论内容
-                              Text(item.comment.content)
-                                .fontSize(12)
-                                .lineHeight(20)
-                                .fontColor('#444444')
-                                .margin({ top: 4, left: 44, right: 12 })
-                              // 回复按钮
-                              Button('回复')
-                                .onClick(() => {
-                                  this.replyParentId = item.comment.comment_id;
-                                  this.commentContent = `@${item.comment.user_name} `;
-                                })
-                                .width(50)
-                                .height(25)
-                                .backgroundColor('#F5F5F5')
-                                .borderRadius(12)
-                                .fontSize(12)
-                                .fontColor('#666666')
-                                .margin({ left: 44 })
+                              .flexGrow(1)
+                              // 点赞
+                              Column() {
+                                Button({ type: ButtonType.Circle }) {
+                                  Image($r('app.media.like'))
+                                    .width(20).height(20)
+                                }
+                                .onClick(() => this.likeComment(item.comment.comment_id))
+                                Text(item.comment.like_count.toString())
+                                  .fontSize(12)
+                                  .fontColor('#999')
+                              }
+                              .margin({ left: 8 })
                             }
                             .margin({ bottom: 12 })
-                            .backgroundColor('#FFFFFF')
-                            .borderRadius(10)
-                            .padding(10)
 
                             // 子评论
                             ForEach(item.replies, (reply: CommentItem) => {
-                              Column() {
-                                Row() {
-                                  Column() {
-                                    Text(reply.user_name)
-                                      .fontSize(12)
-                                      .fontWeight(FontWeight.Bold)
-                                    Text(reply.create_time)
-                                      .fontSize(10)
-                                      .fontColor('#666666')
-                                  }
-                                  .flexGrow(1)
-
-                                  // 点赞区域
+                              Row() {
+                                // 头像
+                                Image($r('app.media.avatar_default'))
+                                  .width(28).height(28)
+                                  .borderRadius(14)
+                                  .backgroundColor('#FFF')
+                                  .margin({ right: 8 })
+                                // 右侧内容
+                                Column() {
                                   Row() {
-                                    Text(reply.like_count.toString())
-                                      .fontSize(12)
-                                      .margin({ right: 4 })
-                                    Button('点赞')
-                                      .onClick(() => {
-                                        this.likeComment(reply.comment_id)
-                                      })
-                                      .width(50)
-                                      .height(25)
-                                      .backgroundColor('#F5F5F5')
-                                      .borderRadius(12)
-                                      .fontSize(12)
-                                      .fontColor('#666666')
+                                    Text(reply.user_name)
+                                      .fontWeight(FontWeight.Bold)
+                                      .fontSize(13)
+                                      .fontColor('#222')
+                                    Text(reply.create_time.split('T')[0])
+                                      .fontSize(10)
+                                      .fontColor('#999')
+                                      .margin({ left: 8 })
                                   }
+                                  Text(reply.content)
+                                    .fontSize(13)
+                                    .fontColor('#222')
+                                    .margin({ top: 2, bottom: 2 })
+                                  Button('回复')
+                                    .onClick(() => {
+                                      this.replyParentId = reply.comment_id;
+                                      this.commentContent = `@${reply.user_name} `;
+                                    })
+                                    .fontSize(12)
+                                    .fontColor('#999')
+                                    .backgroundColor('transparent')
                                 }
-                                .margin({ bottom: 8 })
-
-                                // 评论内容
-                                Text(reply.content)
-                                  .fontSize(12)
-                                  .lineHeight(20)
-                                  .fontColor('#444444')
-                                  .margin({ top: 4, left: 44, right: 12 })
+                                .flexGrow(1)
+                                // 点赞
+                                Column() {
+                                  Button({ type: ButtonType.Circle }) {
+                                    Image($r('app.media.like'))
+                                      .width(18).height(18)
+                                  }
+                                  .onClick(() => this.likeComment(reply.comment_id))
+                                  Text(reply.like_count.toString())
+                                    .fontSize(11)
+                                    .fontColor('#999')
+                                }
+                                .margin({ left: 8 })
                               }
-                              .margin({ bottom: 12, left: 30 }) // 子评论缩进
-                              .backgroundColor('#FFFFFF')
-                              .borderRadius(10)
-                              .padding(10)
+                              .margin({ left: 44, bottom: 8 }) // 子评论缩进
                             })
                           })
                         }
-                        .width('100%')
-                        .backgroundColor('#F5F5F5')
-                        .padding(12)
+                        .backgroundColor('#FFF')
+                        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
 
                         // 新增：所有评论过此文物的用户及内容
                         Text('所有评论过此文物的用户及内容如下：')
@@ -770,59 +777,51 @@ struct AntiqueDetail {
 
               // 固定底部栏
               Row({ space: 8 }) {
-                // 评论输入框
-                TextInput({ placeholder: '发表评论...' })
-                  .onChange((value: string) => {
-                    this.commentContent = value
-                  })
-                  .type(InputType.Normal)
-                  .height(40)
+                // 输入框
+                TextInput({ placeholder: '说点什么...' })
+                  .onChange((v: string) => { this.commentContent = v })
                   .borderRadius(20)
-                  .padding({ left: 12 })
-                  .backgroundColor('#FFFFFF')
-                  .margin({ left: 12 })
-                  .width('200.00vp')
+                  .backgroundColor('#F5F5F5')
+                  .padding({ left: 12, right: 12 })
+                  .width('50%')
 
-                // 评论按钮
-                Button('评论')
-                  .onClick(() => {
-                    this.submitComment()
-                  })
-                  .width(60)
-                  .height(40)
+                // 发送按钮
+                Button('发送')
+                  .onClick(() => this.submitComment())
                   .backgroundColor('#DAA520')
                   .borderRadius(20)
-                  .fontSize(14)
-                  .fontColor('#FFFFFF')
+                  .fontColor('#FFF')
+                  .width(60)
+                  .height(36)
+                  .margin({ right: 4, left: 4 })
 
                 // 点赞按钮+数字
-                Row({ space: 4 }) {
+                Row() {
                   Button({ type: ButtonType.Circle }) {
                     Image(this.isLiked ? $r('app.media.like_filled') : $r('app.media.like'))
-                      .width(24)
-                      .height(24)
+                      .width(24).height(24)
                   }
                   .onClick(() => this.likeAntique())
                   .width(40)
                   .height(40)
                   .backgroundColor('#F5F5F5')
-
                   Text(this.likeCount.toString())
-                    .fontSize(16)
-                    .fontColor('#666666')
-                    .width(32)
-                    .textAlign(TextAlign.Center)
+                    .fontSize(14)
+                    .fontColor('#666')
+                    .margin({ left: 2 })
                 }
-                .padding({ right: 12 })
+                .margin({ right: 8 })
               }
               .width('100%')
               .height(56)
-              .backgroundColor('#F5F5F5')
+              .backgroundColor('#FFF')
               .position({ x: 0, y: '100%' })
               .translate({ y: -56 })
+              .shadow({ radius: 8, color: '#EEE' })
             }
             .width('100%')
             .height('100%')
             .backgroundColor('#F7F8FA')
           }
         }
+
