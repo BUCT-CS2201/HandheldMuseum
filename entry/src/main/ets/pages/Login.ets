@@ -6,7 +6,7 @@ import promptAction from '@ohos.promptAction';
 import emitter from '@ohos.events.emitter';
 
 // 服务器配置
-const SERVER_URL = 'http://localhost:3000'; // 使用 Android 模拟器的特殊 IP 地址
+const SERVER_URL = 'http://10.4.77.43:3000'; // 使用 Android 模拟器的特殊 IP 地址
 
 interface LoginData {
   user_id: number;

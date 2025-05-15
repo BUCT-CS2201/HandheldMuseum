@@ -2,6 +2,8 @@ const express = require('express')
 const router = express.Router()
 const mysqlService = require('../services/mysqlService')
 const neo4jService = require('../services/neo4jService')
+const path = require('path')
+const fs = require('fs')
 
 // 获取文物列表
 router.get('/list', (req, res) => {
@@ -129,18 +131,30 @@ router.get('/comments/:id', async (req, res) => {
 });
 
 // 提交评论
-router.post('/comments/:id', (req, res) => {
-    const id = req.params.id;
-    const { user_id, content, parent_id } = req.body;
-    const sql = 'INSERT INTO relic_comment (relic_id, user_id, content, parent_id) VALUES (?,?,?,?)';
-    mysqlService.query(sql, [id, user_id, content, parent_id], (err, result) => {
-        if (err) {
-            console.error('提交评论失败:', err);
-            return res.status(500).json({ error: '数据库插入失败' });
-        }
-        prompt.showToast({ message: '评论已提交，审核通过后将显示' });
-        res.json({ comment_id: result.insertId });
-    });
+router.post('/upload_comments/:id', async (req, res) => {
+    // 输出请求的详细信息
+    console.log('接收到评论提交请求');
+    console.log('请求参数:', req.params);
+    console.log('请求体:', req.body);
+
+    const relicId = req.params.id; // 从路由参数中获取 relic_id
+    const { user_id, content, parent_id } = req.body; // 从请求体中获取用户ID、评论内容和父评论ID
+
+    // 输出获取到的参数值
+    console.log('文物ID (relic_id):', relicId);
+    console.log('用户ID (user_id):', user_id);
+    console.log('评论内容 (content):', content);
+    console.log('父评论ID (parent_id):', parent_id);
+
+    const sql = 'INSERT INTO relic_comment (relic_id, user_id, content, parent_id) VALUES (?, ?, ?, ?)';
+
+    // 输出即将执行的 SQL 语句和参数
+    console.log('即将执行的 SQL 语句:', sql);
+    console.log('SQL 参数:', [relicId, user_id, content, parent_id]);
+
+    const results = await mysqlService.query(sql, [relicId, user_id, content, parent_id]);
+    console.log(results);
+    res.json({ comment_id: results.insertId });
 });
 
 // 点赞评论
@@ -191,8 +205,8 @@ router.get('/detail/:id', async (req, res) => {
             return res.status(404).json({ error: 'Not found' });
         }
         const item = results[0];
-        item.images = item.images? item.images.split(',') : [];
-        item.videos = item.videos? item.videos.split(',') : [];
+        item.images = item.images ? item.images.split(',') : [];
+        item.videos = item.videos ? item.videos.split(',') : [];
         res.json(item);
     } catch (err) {
         console.error('查询过程中出现错误:', err);
@@ -201,27 +215,27 @@ router.get('/detail/:id', async (req, res) => {
 });
 
 router.get('/comment_status/:user_id', (req, res) => {
-  const user_id = req.params.user_id;
-  const sql = 'SELECT comment_status, name FROM user WHERE user_id = ?';
-  mysqlService.query(sql, [user_id], (err, results) => {
-    if (err || results.length === 0) {
-      return res.status(500).json({ error: '查询失败' });
-    }
-    const resultObj = results[0];
-    if (resultObj.comment_status !== 1) {
-      return res.status(500).json({ error: '您已被禁止评论' });
-    }
-    res.json({ comment_status: resultObj.comment_status, name: resultObj.name });
-  });
+    const user_id = req.params.user_id;
+    const sql = 'SELECT comment_status, name FROM user WHERE user_id = ?';
+    mysqlService.query(sql, [user_id], (err, results) => {
+        if (err || results.length === 0) {
+            return res.status(500).json({ error: '查询失败' });
+        }
+        const resultObj = results[0];
+        if (resultObj.comment_status !== 1) {
+            return res.status(500).json({ error: '您已被禁止评论' });
+        }
+        res.json({ comment_status: resultObj.comment_status, name: resultObj.name });
+    });
 });
 
 // 获取文物点赞和收藏状态
 router.get('/status/:id', async (req, res) => {
-  console.log('收到 status 路由请求:', req.url, req.params, req.query);
-  const id = Number(req.params.id);
-  const userId = Number(req.query.user_id);
+    console.log('收到 status 路由请求:', req.url, req.params, req.query);
+    const id = Number(req.params.id);
+    const userId = Number(req.query.user_id);
 
-  const sql = `
+    const sql = `
     SELECT 
       c.likes_count as like_count,
       (SELECT COUNT(*) FROM user_favorite WHERE relic_id = ? AND user_id = ? AND favorite_type = 1) as favorite_count,
@@ -231,25 +245,25 @@ router.get('/status/:id', async (req, res) => {
     WHERE c.relic_id = ?
   `;
 
-  try {
-    const results = await mysqlService.query(sql, [id, userId, id, userId, id, userId, id]);
-    if (!results || results.length === 0) {
-      console.log('status接口SQL结果为空:', results);
-      return res.status(404).json({ error: '文物不存在' });
+    try {
+        const results = await mysqlService.query(sql, [id, userId, id, userId, id, userId, id]);
+        if (!results || results.length === 0) {
+            console.log('status接口SQL结果为空:', results);
+            return res.status(404).json({ error: '文物不存在' });
+        }
+        const result = results[0];
+        console.log('status接口SQL结果:', results);
+        console.log('接口返回like_count:', result.like_count);
+        res.json({
+            like_count: result.like_count,
+            favorite_count: result.favorite_count,
+            is_liked: result.is_liked > 0,
+            is_favorited: result.is_favorited > 0
+        });
+    } catch (err) {
+        console.error('查询状态失败:', err);
+        res.status(500).json({ error: '数据库查询失败' });
     }
-    const result = results[0];
-    console.log('status接口SQL结果:', results);
-    console.log('接口返回like_count:', result.like_count);
-    res.json({
-      like_count: result.like_count,
-      favorite_count: result.favorite_count,
-      is_liked: result.is_liked > 0,
-      is_favorited: result.is_favorited > 0
-    });
-  } catch (err) {
-    console.error('查询状态失败:', err);
-    res.status(500).json({ error: '数据库查询失败' });
-  }
 });
 
 // 更新文物浏览量
@@ -280,7 +294,7 @@ router.post('/views/:id', async (req, res) => {
         // 4. 获取更新后的浏览量
         const getViewsSql = 'SELECT views_count FROM cultural_relic WHERE relic_id = ?';
         const results = await mysqlService.query(getViewsSql, [id]);
-        
+
         res.json({ views_count: results[0].views_count });
     } catch (err) {
         console.error('更新浏览量失败:', err);
@@ -302,6 +316,26 @@ router.get('/views/:id', async (req, res) => {
         console.error('获取浏览量失败:', err);
         res.status(500).json({ error: '数据库查询失败' });
     }
+});
+
+// 上传图片
+router.post('/upload_images', async (req, res) => {
+
+    const userId = req.headers['user_id']; // 获取用户ID
+    const commentId = req.headers['comment_id']; // 获取评论ID
+
+    // console.log('请求参数:', req.params);
+    console.log('请求头:');
+    console.log('上传的文件:', req.file);
+
+    // console.log(' (images):', req.files['image']);
+    console.log(' (userId):', userId);
+    console.log(' (commentId):', commentId);
+
+    // if (!images || images.length === 0) {
+    //     return res.status(400).json({ error: '没有上传图片' });
+    // }
+
 });
 
 module.exports = router
