@@ -11,7 +11,8 @@ router.get('/list', (req, res) => {
             c.name AS name, 
             i.img_url AS image, 
             c.dynasty AS category, 
-            c.likes_count AS like_count
+            c.likes_count AS like_count,
+            c.views_count AS views_count
         FROM 
             cultural_relic c 
         LEFT JOIN 
@@ -249,6 +250,58 @@ router.get('/status/:id', async (req, res) => {
     console.error('查询状态失败:', err);
     res.status(500).json({ error: '数据库查询失败' });
   }
+});
+
+// 更新文物浏览量
+router.post('/views/:id', async (req, res) => {
+    const id = req.params.id;
+    //const { user_id } = req.body;
+
+    try {
+        // 1. 获取文物的 museum_id
+        // const getMuseumSql = 'SELECT museum_id FROM cultural_relic WHERE relic_id = ?';
+        // const museumResult = await mysqlService.query(getMuseumSql, [id]);
+        // if (museumResult.length === 0) {
+        //     return res.status(404).json({ error: '文物不存在' });
+        // }
+        // const museum_id = museumResult[0].museum_id;
+
+        // 2. 更新文物浏览量
+        const updateViewsSql = 'UPDATE cultural_relic SET views_count = views_count + 1 WHERE relic_id = ?';
+        await mysqlService.query(updateViewsSql, [id]);
+
+        // 3. 记录用户浏览历史
+        // const insertHistorySql = `
+        //     INSERT INTO user_browsing_history (user_id, relic_id, museum_id, browse_time)
+        //     VALUES (?, ?, ?, NOW())
+        // `;
+        // await mysqlService.query(insertHistorySql, [user_id, id, museum_id]);
+
+        // 4. 获取更新后的浏览量
+        const getViewsSql = 'SELECT views_count FROM cultural_relic WHERE relic_id = ?';
+        const results = await mysqlService.query(getViewsSql, [id]);
+        
+        res.json({ views_count: results[0].views_count });
+    } catch (err) {
+        console.error('更新浏览量失败:', err);
+        res.status(500).json({ error: '数据库操作失败' });
+    }
+});
+
+// 获取文物浏览量
+router.get('/views/:id', async (req, res) => {
+    const id = req.params.id;
+    try {
+        const sql = 'SELECT views_count FROM cultural_relic WHERE relic_id = ?';
+        const results = await mysqlService.query(sql, [id]);
+        if (results.length === 0) {
+            return res.status(404).json({ error: '文物不存在' });
+        }
+        res.json({ views_count: results[0].views_count });
+    } catch (err) {
+        console.error('获取浏览量失败:', err);
+        res.status(500).json({ error: '数据库查询失败' });
+    }
 });
 
 module.exports = router

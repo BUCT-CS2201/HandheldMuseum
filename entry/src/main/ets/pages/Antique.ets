@@ -10,6 +10,7 @@ interface AntiqueItem {
   image: string;
   category: string;
   like_count: number;
+  views_count: number;  // 添加浏览量字段
 }
 
 interface ResponseId {
@@ -180,6 +181,24 @@ export default struct Antique {
           // 3. 请求失败，回滚本地+1
           item.like_count -= 1
           console.error('点赞请求失败，已回滚:', err)
+        }
+      }
+    )
+  }
+
+  // 添加更新浏览量的函数
+  private updateViews(item: AntiqueItem): void {
+    // 1. 乐观更新：本地先+1，UI立即变化
+    item.views_count += 1
+    let httpRequest = http.createHttp()
+    httpRequest.request(
+      `http://10.4.9.217:3000/api/antique/views/${item.id}`,
+      { method: http.RequestMethod.POST },
+      (err, data) => {
+        if (err) {
+          // 请求失败，回滚本地+1
+          item.views_count -= 1
+          console.error('更新浏览量失败:', err)
         }
       }
     )
@@ -364,52 +383,49 @@ export default struct Antique {
         LazyForEach(this.dataSource, (item: AntiqueItem) => {
           ListItem() {
             Column() {
-              // 文物图片
               Image(item.image)
                 .width('100%')
-                .aspectRatio(1)
+                .height(120)
+                .borderRadius(8)
                 .objectFit(ImageFit.Cover)
-                .borderRadius(10)
-
-              // 文物名称和点赞信息
+                .onClick(() => {
+                  this.updateViews(item)  // 点击时更新浏览量
+                  router.pushUrl({
+                    url: 'pages/AntiqueDetail',
+                    params: { id: item.id }
+                  })
+                })
+              Text(item.name)
+                .fontSize(14)
+                .margin({ top: 8 })
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
               Row() {
-                Text(item.name)
-                  .fontSize(16)
-                  .fontWeight(FontWeight.Medium)
-                  .margin({ top: 6, bottom: 6 })
-                  .layoutWeight(1)
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                Row() {
-                  Image($r('app.media.like'))
-                    .width(20)
-                    .height(20)
-                    .margin({ right: 4 })
-                    .onClick(() => this.handleLike(item))
-                  Text(item.like_count.toString())
-                    .fontSize(14)
-                    .fontColor('#666666')
-                }
-                .alignItems(VerticalAlign.Center)
+                Image($r('app.media.like'))
+                  .width(16)
+                  .height(16)
+                  .margin({ right: 4 })
+                Text(item.like_count.toString())
+                  .fontSize(12)
+                  .fontColor('#666666')
+                  .margin({ right: 12 })
+                Image($r('app.media.views'))  // 添加浏览量图标
+                  .width(16)
+                  .height(16)
+                  .margin({ right: 4 })
+                Text(item.views_count.toString())  // 显示浏览量
+                  .fontSize(12)
+                  .fontColor('#666666')
               }
               .width('100%')
-              .justifyContent(FlexAlign.SpaceBetween)
-              .padding({ left: 8, right: 8 })
+              .justifyContent(FlexAlign.Start)
+              .margin({ top: 4 })
             }
             .width('100%')
             .padding(10)
             .backgroundColor('#FFFFFF')
             .borderRadius(10)
             .shadow({ radius: 3, color: '#cccccc', offsetX: 0, offsetY: 2 })
-            .onClick(() => {
-              router.pushUrl({
-                url: 'pages/AntiqueDetail',
-                params: { id: item.id.toString() }
-              }).catch((err: BusinessError) => {
-                console.error(`跳转失败: ${err.message}`)
-              })
-            })
           }
         }, (item: AntiqueItem) => item.id.toString())
       }
