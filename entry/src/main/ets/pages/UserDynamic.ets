@@ -6,7 +6,7 @@ import EventHub from '../common/utils/EventHub';
 
 // 本地图片存储配置
 const LOCAL_IMAGE_BASE = 'file:///data/storage/el2/base/cache/uploads/';
-const BACKEND_IMAGE_BASE = 'http://localhost:3000/uploads/';
+const BACKEND_IMAGE_BASE = 'http://localhost:3000/uploads/DynamicUploads/';
 
 // 在文件开头的import语句后添加接口定义
 interface LikeResponse {
@@ -42,6 +42,7 @@ struct DynamicItemComponent {
   @State currentUserId: number = 1; // TODO: 从用户状态获取
   @State currentUsername: string = '当前用户'; // TODO: 从用户状态获取
   @State showCommentInput: boolean = false;
+  @State expandedReplies: Set<number> = new Set();
 
   aboutToAppear() {
     if (this.showComments) {
@@ -54,6 +55,7 @@ struct DynamicItemComponent {
 
     this.loadingComments = true;
     try {
+      console.log('开始加载评论，动态ID:', this.item.id);
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
         `http://localhost:3000/api/dynamic/comments/${this.item.id}`,
@@ -65,14 +67,16 @@ struct DynamicItemComponent {
         }
       );
 
+      console.log('评论API响应状态码:', response.responseCode);
+      console.log('评论API响应数据:', response.result);
+
       if (response.responseCode === 200) {
         const commentsData: APICommentItem[] = JSON.parse(response.result as string);
-        // 处理评论数据，构建评论树
-        const commentMap = new Map<number, CommentItem>();
-        const rootComments: CommentItem[] = [];
-
-        // 首先创建所有评论对象
-        commentsData.forEach(c => {
+        console.log('解析后的评论数据:', commentsData);
+        
+        // 直接使用后端返回的评论树结构
+        const rootComments = commentsData.map(c => {
+          console.log('处理评论项:', c);
           const comment = new CommentItem(
             c.comment_id,
             c.username,
@@ -81,33 +85,48 @@ struct DynamicItemComponent {
             c.parent_id,
             c.reply_count
           );
-          commentMap.set(c.comment_id, comment);
-        });
-
-        // 构建评论树
-        commentsData.forEach(c => {
-          const comment = commentMap.get(c.comment_id);
-          if (!comment) return; // 跳过不存在的评论
-
-          if (c.parent_id === this.item.id) {
-            // 这是对动态的评论
-            rootComments.push(comment);
-          } else if (c.parent_id) {
-            // 这是对评论的回复
-            const parentComment = commentMap.get(c.parent_id);
-            if (parentComment) {
-              parentComment.replies.push(comment);
-            }
+          
+          // 递归处理子评论
+          if (c.replies && c.replies.length > 0) {
+            comment.replies = c.replies.map(reply => {
+              const replyComment = new CommentItem(
+                reply.comment_id,
+                reply.username,
+                reply.content,
+                reply.create_time,
+                reply.parent_id,
+                reply.reply_count
+              );
+              // 递归处理更深层级的回复
+              if (reply.replies && reply.replies.length > 0) {
+                replyComment.replies = reply.replies.map(subReply => {
+                  return new CommentItem(
+                    subReply.comment_id,
+                    subReply.username,
+                    subReply.content,
+                    subReply.create_time,
+                    subReply.parent_id,
+                    subReply.reply_count
+                  );
+                });
+              } else {
+                replyComment.replies = [];
+              }
+              return replyComment;
+            });
+          } else {
+            comment.replies = [];
           }
+          
+          console.log('创建评论对象:', comment);
+          return comment;
         });
 
-        // 按时间排序
-        rootComments.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-        rootComments.forEach(comment => {
-          comment.replies.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-        });
-
+        console.log('最终构建的评论树:', rootComments);
         this.comments = rootComments;
+        
+        // 强制更新视图
+        this.comments = [...this.comments];
       } else {
         const errorData: ErrorResponse = JSON.parse(response.result as string);
         console.error('加载评论失败:', errorData.error);
@@ -198,6 +217,116 @@ struct DynamicItemComponent {
       }
     } catch (error) {
       console.error('删除评论失败:', error);
+    }
+  }
+
+  @Builder
+  renderComment(comment: CommentItem, level: number = 0) {
+    Column() {
+      // 主体评论内容
+      Row() {
+        Image($r('app.media.default_avatar'))
+          .width(level === 0 ? 32 : 24)
+          .height(level === 0 ? 32 : 24)
+          .borderRadius(level === 0 ? 16 : 12)
+          .margin({ right: 8 })
+
+        Column() {
+          Row() {
+            Text(comment.user)
+              .fontColor('#007AFF')
+              .fontSize(level === 0 ? 14 : 12)
+              .fontWeight(FontWeight.Medium)
+
+            Text(comment.content)
+              .fontColor('#333333')
+              .fontSize(level === 0 ? 14 : 12)
+              .margin({ left: 4 })
+              .layoutWeight(1)
+          }
+          .width('100%')
+
+          Row() {
+            Text(comment.time)
+              .fontSize(level === 0 ? 12 : 10)
+              .fontColor('#999999')
+
+            if (comment.reply_count > 0) {
+              Text(`${comment.reply_count}条回复`)
+                .fontSize(level === 0 ? 12 : 10)
+                .fontColor('#007AFF')
+                .margin({ left: 16 })
+                .onClick(() => {
+                  console.log('点击了X条回复', comment.id, 'expandedReplies:', this.expandedReplies);
+                  console.log('当前评论的replies:', comment.replies);
+                  if (this.expandedReplies.has(comment.id)) {
+                    const newSet = new Set(this.expandedReplies);
+                    newSet.delete(comment.id);
+                    this.expandedReplies = newSet;
+                    console.log('收起评论，新的expandedReplies:', this.expandedReplies);
+                  } else {
+                    this.expandedReplies = new Set(this.expandedReplies).add(comment.id);
+                    console.log('展开评论，新的expandedReplies:', this.expandedReplies);
+                  }
+                  // 强制更新视图
+                  this.comments = [...this.comments];
+                })
+            }
+
+            Text('回复')
+              .fontSize(level === 0 ? 12 : 10)
+              .fontColor('#007AFF')
+              .margin({ left: 16 })
+              .onClick(() => {
+                if (this.replyToId === comment.id) {
+                  this.replyTo = '';
+                  this.replyToId = undefined;
+                  this.showCommentInput = false;
+                } else {
+                  this.replyTo = comment.user;
+                  this.replyToId = comment.id;
+                  this.showCommentInput = true;
+                }
+              })
+
+            if (comment.user === this.currentUsername) {
+              Text('删除')
+                .fontSize(level === 0 ? 12 : 10)
+                .fontColor('#FF3A30')
+                .margin({ left: 16 })
+                .onClick(() => {
+                  this.deleteComment(comment.id);
+                })
+            }
+          }
+          .margin({ top: 4 })
+        }
+        .layoutWeight(1)
+      }
+      .width('100%')
+      .padding({ left: level === 0 ? 16 : 12, right: 16, top: 12, bottom: 12 })
+      .backgroundColor(level === 0 ? '#F8F8F8' : '#F0F0F0')
+      .borderRadius(level === 0 ? 8 : 6)
+      .margin({ bottom: 8 })
+
+      // 子评论递归渲染
+      if (comment.replies && comment.replies.length > 0) {
+        Column() {
+          if (this.expandedReplies.has(comment.id)) {
+            ForEach(comment.replies, (reply: CommentItem) => {
+              this.renderComment(reply, level + 1)
+            }, (reply: CommentItem) => reply.id.toString())
+          }
+        }
+        .margin({ left: 28 })
+        .animation({
+          duration: 300,
+          curve: Curve.EaseInOut
+        })
+        .opacity(this.expandedReplies.has(comment.id) ? 1 : 0)
+        .height(this.expandedReplies.has(comment.id) ? 'auto' : 0)
+        .visibility(this.expandedReplies.has(comment.id) ? Visibility.Visible : Visibility.None)
+      }
     }
   }
 
@@ -329,142 +458,7 @@ struct DynamicItemComponent {
             } else {
               Column() {
                 ForEach(this.comments, (comment: CommentItem) => {
-                  Column() {
-                    // 主评论
-                    Row() {
-                      Image($r('app.media.default_avatar'))
-                        .width(32)
-                        .height(32)
-                        .borderRadius(16)
-                        .margin({ right: 8 })
-
-                      Column() {
-                        Row() {
-                          Text(comment.user)
-                            .fontColor('#007AFF')
-                            .fontSize(14)
-                            .fontWeight(FontWeight.Medium)
-
-                          Text(comment.content)
-                            .fontColor('#333333')
-                            .fontSize(14)
-                            .margin({ left: 4 })
-                            .layoutWeight(1)
-                        }
-                        .width('100%')
-
-                        Row() {
-                          Text(comment.time)
-                            .fontSize(12)
-                            .fontColor('#999999')
-
-                          if (comment.reply_count > 0) {
-                            Text(`${comment.reply_count}条回复`)
-                              .fontSize(12)
-                              .fontColor('#007AFF')
-                              .margin({ left: 16 })
-                              .onClick(() => {
-                                this.replyTo = comment.user;
-                                this.replyToId = comment.id;
-                                this.showCommentInput = true;
-                              })
-                          }
-
-                          Text('回复')
-                            .fontSize(12)
-                            .fontColor('#007AFF')
-                            .margin({ left: 16 })
-                            .onClick(() => {
-                              this.replyTo = comment.user;
-                              this.replyToId = comment.id;
-                              this.showCommentInput = true;
-                            })
-
-                          if (comment.user === this.currentUsername) {
-                            Text('删除')
-                              .fontSize(12)
-                              .fontColor('#FF3A30')
-                              .margin({ left: 16 })
-                              .onClick(() => {
-                                this.deleteComment(comment.id);
-                              })
-                          }
-                        }
-                        .margin({ top: 4 })
-                      }
-                      .layoutWeight(1)
-                    }
-                    .width('100%')
-                    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-                    .backgroundColor('#F8F8F8')
-                    .borderRadius(8)
-                    .margin({ bottom: 8 })
-
-                    // 回复列表
-                    if (comment.replies && comment.replies.length > 0) {
-                      Column() {
-                        ForEach(comment.replies, (reply: CommentItem) => {
-                          Row() {
-                            Image($r('app.media.default_avatar'))
-                              .width(24)
-                              .height(24)
-                              .borderRadius(12)
-                              .margin({ right: 8 })
-
-                            Column() {
-                              Row() {
-                                Text(reply.user)
-                                  .fontColor('#007AFF')
-                                  .fontSize(12)
-                                  .fontWeight(FontWeight.Medium)
-
-                                Text(reply.content)
-                                  .fontColor('#333333')
-                                  .fontSize(12)
-                                  .margin({ left: 4 })
-                                  .layoutWeight(1)
-                              }
-                              .width('100%')
-
-                              Row() {
-                                Text(reply.time)
-                                  .fontSize(10)
-                                  .fontColor('#999999')
-
-                                Text('回复')
-                                  .fontSize(10)
-                                  .fontColor('#007AFF')
-                                  .margin({ left: 16 })
-                                  .onClick(() => {
-                                    this.replyTo = reply.user;
-                                    this.replyToId = reply.id;
-                                    this.showCommentInput = true;
-                                  })
-
-                                if (reply.user === this.currentUsername) {
-                                  Text('删除')
-                                    .fontSize(10)
-                                    .fontColor('#FF3A30')
-                                    .margin({ left: 16 })
-                                    .onClick(() => {
-                                      this.deleteComment(reply.id);
-                                    })
-                              }
-                              }
-                              .margin({ top: 2 })
-                            }
-                            .layoutWeight(1)
-                          }
-                          .width('100%')
-                          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-                          .backgroundColor('#F0F0F0')
-                          .borderRadius(6)
-                          .margin({ bottom: 4 })
-                        })
-                      }
-                      .margin({ left: 40 })
-                    }
-                  }
+                  this.renderComment(comment, 0)
                 })
               }
               .width('100%')
@@ -493,10 +487,76 @@ struct DynamicItemComponent {
             .backgroundColor('#F0F0F0')
             .borderRadius(20)
             .onClick(() => {
-              this.replyTo = '';
-              this.replyToId = undefined;
-              this.showCommentInput = true;
+              if (this.showCommentInput) {
+                // 如果评论框已经显示，则隐藏它
+                this.showCommentInput = false;
+                this.replyTo = '';
+                this.replyToId = undefined;
+              } else {
+                // 否则显示评论框
+                this.showCommentInput = true;
+                this.replyTo = '';
+                this.replyToId = undefined;
+              }
             })
+            .margin({ bottom: 16 })
+
+            // 评论输入框
+            if (this.showCommentInput) {
+              Column() {
+                if (this.replyTo) {
+                  Row() {
+                    Text(`回复 ${this.replyTo}:`)
+                      .fontSize(14)
+                      .fontColor('#666666')
+                      .margin({ left: 12, bottom: 8 })
+                  }
+                  .width('100%')
+                }
+
+                Row() {
+                  TextInput({
+                    placeholder: this.replyTo ? `回复 ${this.replyTo}...` : '添加评论...',
+                    text: this.commentText
+                  })
+                    .height(40)
+                    .layoutWeight(1)
+                    .fontSize(16)
+                    .backgroundColor('#FFFFFF')
+                    .padding(8)
+                    .borderRadius(20)
+                    .onChange((value: string) => {
+                      this.commentText = value;
+                    })
+                    .onSubmit(() => {
+                      this.submitComment();
+                    })
+
+                  Button('发送')
+                    .width(60)
+                    .height(40)
+                    .fontSize(14)
+                    .fontColor('#FFFFFF')
+                    .backgroundColor(this.commentText.trim() ? '#007AFF' : '#CCCCCC')
+                    .borderRadius(20)
+                    .margin({ left: 8 })
+                    .enabled(this.commentText.trim().length > 0)
+                    .onClick(() => {
+                      this.submitComment();
+                      // 发送后清空输入框并隐藏
+                      this.commentText = '';
+                      this.showCommentInput = false;
+                      this.replyTo = '';
+                      this.replyToId = undefined;
+                    })
+                }
+                .width('100%')
+                .padding({ left: 12, right: 12, bottom: 8 })
+              }
+              .width('100%')
+              .backgroundColor('#F5F5F5')
+              .padding({ top: 8, bottom: 12 })
+            }
           }
           .margin({ top: 8 })
           .animation({
@@ -509,58 +569,6 @@ struct DynamicItemComponent {
       .backgroundColor('#FFFFFF')
       .borderRadius(16)
       .shadow({ radius: 12, color: '#10000000', offsetX: 0, offsetY: 4 })
-
-      // 评论输入框
-      if (this.showCommentInput) {
-        Column() {
-          if (this.replyTo) {
-            Row() {
-              Text(`回复 ${this.replyTo}:`)
-                .fontSize(14)
-                .fontColor('#666666')
-                .margin({ left: 12, bottom: 8 })
-            }
-            .width('100%')
-          }
-
-          Row() {
-            TextInput({
-              placeholder: this.replyTo ? `回复 ${this.replyTo}...` : '添加评论...',
-              text: this.commentText
-            })
-              .height(40)
-              .layoutWeight(1)
-              .fontSize(16)
-              .backgroundColor('#FFFFFF')
-              .padding(8)
-              .borderRadius(20)
-              .onChange((value: string) => {
-                this.commentText = value;
-              })
-              .onSubmit(() => {
-                this.submitComment();
-              })
-
-            Button('发送')
-              .width(60)
-              .height(40)
-              .fontSize(14)
-              .fontColor('#FFFFFF')
-              .backgroundColor(this.commentText.trim() ? '#007AFF' : '#CCCCCC')
-              .borderRadius(20)
-              .margin({ left: 8 })
-              .enabled(this.commentText.trim().length > 0)
-              .onClick(() => this.submitComment())
-          }
-          .width('100%')
-          .padding({ left: 12, right: 12, bottom: 8 })
-        }
-        .width('100%')
-        .backgroundColor('#F5F5F5')
-        .padding({ top: 8, bottom: 12 })
-        .position({ x: 0, y: 0 })
-        .zIndex(10000)
-      }
 
       // 全屏图片预览
       if (this.showFullImage) {
@@ -884,6 +892,8 @@ struct UserDynamic {
             .layoutWeight(1)
             .scrollBar(BarState.Auto)
             .edgeEffect(EdgeEffect.Spring)
+            .padding({ bottom: 72 }) // 增加底部padding，为导航栏预留空间
+            .listDirection(Axis.Vertical)
           }
           .onRefreshing(() => {
             this.refreshing = true;

@@ -18,6 +18,7 @@ export interface APICommentItem {
   reply_count: number;
   like_count: number;
   avatar?: string;
+  replies?: APICommentItem[];
 }
 
 export interface APIDynamicResponse {

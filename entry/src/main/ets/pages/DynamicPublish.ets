@@ -5,9 +5,20 @@ import fileio from '@ohos.fileio';
 import http from '@ohos.net.http';
 import { DynamicItem, UploadImageItem } from '../common/types/DynamicTypes';
 import fs from '@ohos.file.fs';
+import preferences from '@ohos.data.preferences';
+import prompt from '@ohos.prompt';
 
 // 修改路径为 HarmonyOS 标准缓存路径
-const UPLOAD_DIR = 'file:///data/user/0/com.example.app/cache/uploads/';
+const UPLOAD_DIR = 'file:///data/user/0/com.example.app/cache/uploads/DynamicUploads/';
+
+interface FetchResult {
+  result: string | object;
+  comment_id?: number;
+}
+
+interface GeneratedTypeLiteralInterface_2 {
+  comment_id: number;
+}
 
 @Entry
 @Component
@@ -207,37 +218,42 @@ struct DynamicPublish {
 
     this.publishLoading = true;
     try {
-      // 1. 上传图片到本地缓存目录
-      const savedImages = await this.saveImagesToLocal();
-      if (savedImages.length === 0 && this.selectedImages.length > 0) {
-        throw new Error('图片保存失败');
+      const userId = await this.getUserId();
+      if (!userId) {
+        this.showToast('请先登录');
+        return;
       }
 
-      // 2. 创建动态对象
-      const newDynamic = new DynamicItem(
-        Date.now(),
-        await this.getCurrentUsername(),
-        this.content,
-        new Date().toISOString(),
-        0,
-        savedImages,
-        [],
-        false,
-        await this.getCurrentUserAvatar(),
-        false
-      );
+      // 1. 提交动态内容（使用与评论相同的接口）
+      const httpRequest = http.createHttp();
+      const url = 'http://10.4.77.43:3000/api/antique/upload_comments/0'; // relicId 设为 0 表示动态
+      const response: FetchResult = await httpRequest.request(url, {
+        method: http.RequestMethod.POST,
+        header: { 'Content-Type': 'application/json' },
+        expectDataType: http.HttpDataType.OBJECT,
+        extraData: JSON.stringify({
+          user_id: userId,
+          content: this.content,
+          parent_id: null
+        })
+      }) as FetchResult;
 
-      // 3. 调用API提交到服务器
-      const success = await this.submitToServer(newDynamic);
-      if (!success) {
+      // 2. 处理响应并上传图片
+      if (response && response.result && typeof response.result === 'object') {
+        const commentId = (response.result as GeneratedTypeLiteralInterface_2).comment_id;
+        
+        // 3. 上传图片（使用Python Flask接口）
+        if (this.selectedImages.length > 0) {
+          await this.uploadImagesWithCommentId(commentId);
+        }
+
+        this.showToast('动态已发布，审核通过后将显示');
+        this.content = '';
+        this.selectedImages = [];
+        router.back();
+      } else {
         throw new Error('提交服务器失败');
       }
-
-      // 4. 更新本地存储
-      const currentDynamics = AppStorage.get<DynamicItem[]>('dynamics') || [];
-      AppStorage.setOrCreate('dynamics', [newDynamic, ...currentDynamics]);
-
-      router.back();
     } catch (error) {
       console.error('发布失败:', error);
       this.showError = true;
@@ -247,59 +263,69 @@ struct DynamicPublish {
     }
   }
 
-  private async saveImagesToLocal(): Promise<string[]> {
-    const savedPaths: string[] = []
-    for (const uri of this.selectedImages) {
-      try {
-        const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`
-        const destPath = `${UPLOAD_DIR}${fileName}`
-
-        await fs.copyFile(uri, destPath)
-        savedPaths.push(destPath)
-      } catch (error) {
-        console.error('图片保存失败:', error)
-      }
+  private async uploadImagesWithCommentId(commentId: number): Promise<void> {
+    const userId = await this.getUserId();
+    if (this.selectedImages.length === 0) {
+      return;
     }
-    return savedPaths
-  }
 
-  private async getCurrentUsername(): Promise<string> {
-    // 从AppStorage获取当前用户信息
-    return AppStorage.get<string>('currentUsername') || '当前用户'
-  }
+    // 使用Python Flask接口上传图片
+    const uploadUrl: string = 'http://10.4.77.43:5000/upload_image';
+    const httpRequest: http.HttpRequest = http.createHttp();
 
-  private async getCurrentUserAvatar(): Promise<Resource> {
-    // 从AppStorage获取用户头像
-    return AppStorage.get<Resource>('currentUserAvatar') || $r("app.media.default_avatar")
-  }
+    for (const imageUri of this.selectedImages) {
+      try {
+        // 读取图片文件
+        let resultPhoto = fs.openSync(imageUri, fs.OpenMode.READ_ONLY);
+        let fileTemp = fs.openSync(getContext().filesDir + resultPhoto.name, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
+        let imageUri_1: string = fileTemp.path;
+        fs.copyFileSync(resultPhoto.fd, fileTemp.fd);
+        fs.closeSync(resultPhoto);
+        fs.closeSync(fileTemp);
+        console.info('开始上传图片，图片URI:', imageUri_1);
 
-  private async submitToServer(dynamic: DynamicItem): Promise<boolean> {
-    try {
-      let httpRequest = http.createHttp();
-      let response = await httpRequest.request(
-        "http://localhost:3000/api/dynamic/publish",
-        {
+        // 使用Python Flask接口上传图片
+        const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
           method: http.RequestMethod.POST,
           header: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'multipart/form-data',
+            'Connection': 'keep-alive',
+            'user_id': userId.toString(),
+            'comment_id': commentId.toString()
           },
-          extraData: JSON.stringify({
-            content: dynamic.content,
-            images: dynamic.images.map(uri => {
-              const fileName = uri.split('/').pop();
-              const uploadImage: UploadImageItem = {
-                image_id: fileName?.split('.')[0] || '',
-                suffix: fileName?.split('.')[1] || 'jpg'
-              };
-              return uploadImage;
-            })
-          })
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          multiFormDataList: [
+            {
+              name: 'image',
+              contentType: 'image/jpeg',
+              filePath: imageUri_1,
+              remoteFileName: 'file.jpg'
+            },
+          ],
+        });
+
+        if (response.responseCode !== 200) {
+          throw new Error('图片上传失败');
         }
-      );
-      return response.responseCode === 200;
-    } catch (error) {
-      console.error('API请求失败:', error)
-      return false
+      } catch (error) {
+        console.error('图片上传失败:', error);
+        throw new Error(error.message || String(error));
+      }
     }
+  }
+
+  private async getUserId(): Promise<number> {
+    try {
+      const userPreferences = await preferences.getPreferences(getContext(), 'userInfo');
+      const userId: number = await userPreferences.get('userId', 0) as number;
+      return userId;
+    } catch (error) {
+      console.error('获取用户ID失败:', error);
+      return 0;
+    }
+  }
+
+  private showToast(message: string) {
+    prompt.showToast({ message: message });
   }
 }

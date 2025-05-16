@@ -6,7 +6,7 @@ const path = require('path')
 const fs = require('fs')
 
 // 确保上传目录存在
-const uploadDir = path.join(__dirname, '../uploads')
+const uploadDir = path.join(__dirname, '../uploads/DynamicUploads')
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true })
 }
@@ -305,7 +305,7 @@ router.get('/comments/:dynamicId', async (req, res) => {
     const { dynamicId } = req.params;
     console.log('获取评论列表，动态ID:', dynamicId);
     
-    // 修改SQL查询，获取所有相关评论
+    // 查询该动态下所有评论（不加parent_id条件，支持多级）
     const sql = `
       SELECT 
         c.comment_id,
@@ -318,14 +318,13 @@ router.get('/comments/:dynamicId', async (req, res) => {
       FROM relic_comment c
       LEFT JOIN user u ON c.user_id = u.user_id
       WHERE c.relic_id = 0 
-      AND c.is_deleted = 0
-      AND c.status = 1
-      AND (c.parent_id = ? OR c.comment_id = ?)
+        AND c.is_deleted = 0
+        AND c.status = 1
       ORDER BY c.create_time ASC
     `;
     
-    console.log('执行查询SQL:', sql, [dynamicId, dynamicId]);
-    const comments = await mysqlService.query(sql, [dynamicId, dynamicId]);
+    console.log('执行查询SQL:', sql);
+    const comments = await mysqlService.query(sql);
     console.log('查询结果:', comments);
     
     // 处理评论层级关系
@@ -334,23 +333,20 @@ router.get('/comments/:dynamicId', async (req, res) => {
 
     // 首先将所有评论放入Map
     comments.forEach(comment => {
-      commentMap.set(comment.comment_id, {
-        ...comment,
-        replies: []
-      });
+      comment.replies = [];
+      commentMap.set(comment.comment_id, comment);
     });
 
     // 构建评论树
     comments.forEach(comment => {
-      const commentWithReplies = commentMap.get(comment.comment_id);
-      if (comment.parent_id === parseInt(dynamicId)) {
-        // 这是对动态的评论
-        rootComments.push(commentWithReplies);
+      if (Number(comment.parent_id) === Number(dynamicId)) {
+        // 这是主评论
+        rootComments.push(comment);
       } else if (comment.parent_id) {
-        // 这是对评论的回复
-        const parentComment = commentMap.get(comment.parent_id);
+        // 这是子评论
+        const parentComment = commentMap.get(Number(comment.parent_id));
         if (parentComment) {
-          parentComment.replies.push(commentWithReplies);
+          parentComment.replies.push(comment);
         }
       }
     });
@@ -489,6 +485,35 @@ router.delete('/comment/:commentId', async (req, res) => {
   } catch (err) {
     console.error('删除评论失败:', err);
     res.status(500).json({ error: '删除评论失败' });
+  }
+});
+
+// 获取某条评论的直接子评论
+router.get('/comments/children/:parentId', async (req, res) => {
+  try {
+    const { parentId } = req.params;
+    const sql = `
+      SELECT 
+        c.comment_id,
+        c.content,
+        c.create_time,
+        c.like_count,
+        c.reply_count,
+        c.parent_id,
+        u.name AS username
+      FROM relic_comment c
+      LEFT JOIN user u ON c.user_id = u.user_id
+      WHERE c.relic_id = 0 
+        AND c.is_deleted = 0
+        AND c.status = 1
+        AND c.parent_id = ?
+      ORDER BY c.create_time ASC
+    `;
+    const comments = await mysqlService.query(sql, [parentId]);
+    comments.forEach(comment => comment.replies = []);
+    res.json(comments);
+  } catch (err) {
+    res.status(500).json({ error: '获取子评论失败', details: err.message || '未知错误' });
   }
 });
 
