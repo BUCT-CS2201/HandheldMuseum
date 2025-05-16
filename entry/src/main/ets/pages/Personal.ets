@@ -138,7 +138,9 @@ export default struct Personal {
             this.MenuItem('我的收藏', $r('app.media.favorite'))
           }
           ListItem() {
-            this.MenuItem('浏览历史', $r('app.media.history'))
+            this.MenuItem('浏览历史', $r('app.media.history'),()=>{
+              router.pushUrl({ url: 'pages/BrowsingHistory'});
+            })
           }
           ListItem() {
             this.MenuItem('消息通知', $r('app.media.notification'))

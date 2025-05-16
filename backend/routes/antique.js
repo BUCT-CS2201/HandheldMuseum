@@ -256,27 +256,27 @@ router.get('/status/:id', async (req, res) => {
 // 更新文物浏览量
 router.post('/views/:id', async (req, res) => {
     const id = req.params.id;
-    //const { user_id } = req.body;
+    const { user_id } = req.body;
 
     try {
         // 1. 获取文物的 museum_id
-        // const getMuseumSql = 'SELECT museum_id FROM cultural_relic WHERE relic_id = ?';
-        // const museumResult = await mysqlService.query(getMuseumSql, [id]);
-        // if (museumResult.length === 0) {
-        //     return res.status(404).json({ error: '文物不存在' });
-        // }
-        // const museum_id = museumResult[0].museum_id;
+        const getMuseumSql = 'SELECT museum_id FROM cultural_relic WHERE relic_id = ?';
+        const museumResult = await mysqlService.query(getMuseumSql, [id]);
+        if (museumResult.length === 0) {
+            return res.status(404).json({ error: '文物不存在' });
+        }
+        const museum_id = museumResult[0].museum_id;
 
         // 2. 更新文物浏览量
         const updateViewsSql = 'UPDATE cultural_relic SET views_count = views_count + 1 WHERE relic_id = ?';
         await mysqlService.query(updateViewsSql, [id]);
 
         // 3. 记录用户浏览历史
-        // const insertHistorySql = `
-        //     INSERT INTO user_browsing_history (user_id, relic_id, museum_id, browse_time)
-        //     VALUES (?, ?, ?, NOW())
-        // `;
-        // await mysqlService.query(insertHistorySql, [user_id, id, museum_id]);
+        const insertHistorySql = `
+            INSERT INTO user_browsing_history (user_id, relic_id, museum_id, browse_time)
+            VALUES (?, ?, ?, NOW())
+        `;
+        await mysqlService.query(insertHistorySql, [user_id, id, museum_id]);
 
         // 4. 获取更新后的浏览量
         const getViewsSql = 'SELECT views_count FROM cultural_relic WHERE relic_id = ?';
@@ -304,6 +304,40 @@ router.get('/views/:id', async (req, res) => {
         res.status(500).json({ error: '数据库查询失败' });
     }
 });
+
+// 获取用户浏览历史
+router.get('/history/:user_id', async (req, res) => {
+    const user_id = req.params.user_id;
+    try {
+        const sql = `
+            SELECT b.relic_id, c.name, i.img_url, b.browse_time
+            FROM user_browsing_history b
+            JOIN cultural_relic c ON c.relic_id = b.relic_id
+            JOIN relic_image i ON c.relic_id = i.relic_id
+            WHERE b.user_id = ?
+            ORDER BY b.browse_time DESC
+        `;
+        const results = await mysqlService.query(sql, [user_id]);
+
+        if (results.length === 0) {
+            return res.status(200).json([]); // 返回空数组更合理
+        }
+
+        // 格式化结果数组
+        const formatted = results.map(row => ({
+            id: row.relic_id,
+            name: row.name,
+            imageUrl: row.img_url,
+            browseTime: row.browse_time
+        }));
+
+        res.json(formatted); // 返回数组
+    } catch (err) {
+        console.error('获取浏览历史失败:', err);
+        res.status(500).json({ error: '数据库查询失败' });
+    }
+});
+
 
 // 上传图片
 router.post('/upload_images', async (req, res) => {

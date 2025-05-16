@@ -15,6 +15,7 @@
     "pages/Settings",
     "pages/DynamicPublish",
     "pages/UserDynamic",
-    "pages/SearchResult"
+    "pages/SearchResult",
+    "pages/BrowsingHistory"
   ]
 }

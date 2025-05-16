@@ -163,7 +163,7 @@ struct AntiqueDetail {
 
   fetchAntiqueDetail(id: number): void {
     const httpRequest = http.createHttp();
-    const url = `http://localhost:3000/api/antique/detail/${id}`;
+    const url = `http://192.168.1.103:3000/api/antique/detail/${id}`;
     console.log('请求的URL:', url);
 
     httpRequest.request(
@@ -243,7 +243,7 @@ struct AntiqueDetail {
   fetchComments(id: number): void {
     console.log('fetchComments被调用，id:', id);
     const httpRequest = http.createHttp();
-    const url = `http://localhost:3000/api/antique/comments/${id}`;
+    const url = `http://192.168.1.103:3000/api/antique/comments/${id}`;
     httpRequest.request(
       url,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
@@ -326,7 +326,7 @@ struct AntiqueDetail {
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
     if (relicId > 0 && this.commentContent) {
         const httpRequest2 = http.createHttp();
-        const url = `http://localhost:3000/api/antique/upload_comments/${relicId}`; // 确保包含 relicId
+        const url = `http://192.168.1.103:3000/api/antique/upload_comments/${relicId}`; // 确保包含 relicId
         const response: FetchResult = await httpRequest2.request(url, {
             method: http.RequestMethod.POST,
             header: { 'Content-Type': 'application/json' },
@@ -361,7 +361,7 @@ struct AntiqueDetail {
         return; // 没有选择图片
     }
 
-    const uploadUrl: string = 'http://localhost:5000/upload_image'; // 假设这是上传图片的接口
+    const uploadUrl: string = 'http://192.168.1.103:5000/upload_image'; // 假设这是上传图片的接口
     const httpRequest: http.HttpRequest = http.createHttp();
 
     this.selectedImages.map( async (imageUri) => {
@@ -402,7 +402,7 @@ struct AntiqueDetail {
       return; // 退出函数
     }
     const httpRequest = http.createHttp();
-    const url = `http://localhost:3000/api/antique/comments/like/${comment_id}`;
+    const url = `http://192.168.1.103:3000/api/antique/comments/like/${comment_id}`;
     httpRequest.request(
       url,
       {
@@ -438,7 +438,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/antique/like/${relicId}`,
+      `http://192.168.1.103:3000/api/antique/like/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -478,7 +478,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/antique/favorite/${relicId}`,
+      `http://192.168.1.103:3000/api/antique/favorite/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -511,7 +511,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/antique/status/${relicId}?user_id=${userId}`,
+      `http://192.168.1.103:3000/api/antique/status/${relicId}?user_id=${userId}`,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
       (err: Error | undefined, data: FetchResult) => {
         if (err) {

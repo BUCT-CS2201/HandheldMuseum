@@ -3,6 +3,7 @@ import router from '@ohos.router'
 import {BusinessError} from '@kit.BasicServicesKit'
 import picker from '@ohos.file.picker'
 import fs from '@ohos.file.fs'
+import preferences from '@ohos.data.preferences';
 
 interface AntiqueItem {
   id: number;
@@ -95,7 +96,7 @@ export default struct Antique {
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://localhost:3000/api/antique/list?ts=${Date.now()}`,
+      `http://192.168.1.103:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
@@ -152,7 +153,7 @@ export default struct Antique {
     item.like_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://localhost:3000/api/antique/like/${item.id}`,
+      `http://192.168.1.103:3000/api/antique/like/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         let response: LikeResponse | null = null
@@ -186,22 +187,37 @@ export default struct Antique {
     )
   }
 
-  // 添加更新浏览量的函数
-  private updateViews(item: AntiqueItem): void {
-    // 1. 乐观更新：本地先+1，UI立即变化
-    item.views_count += 1
-    let httpRequest = http.createHttp()
-    httpRequest.request(
-      `http://localhost:3000/api/antique/views/${item.id}`,
-      { method: http.RequestMethod.POST },
-      (err, data) => {
-        if (err) {
-          // 请求失败，回滚本地+1
-          item.views_count -= 1
-          console.error('更新浏览量失败:', err)
-        }
+  private async updateViews(item: AntiqueItem): Promise<void> {
+    try {
+      const pref = await preferences.getPreferences(getContext(), 'userInfo');
+      const userId = await pref.get('userId', 0) as number;
+
+      if (!userId || typeof userId !== 'number') {
+        console.error('未获取到用户ID，无法记录浏览历史');
+        return;
       }
-    )
+
+      // 本地预加 +1（乐观更新）
+      item.views_count += 1;
+
+      let httpRequest = http.createHttp();
+      httpRequest.request(
+        `http://192.168.1.103:3000/api/antique/views/${item.id}`,
+        {
+          method: http.RequestMethod.POST,
+          header: { 'Content-Type': 'application/json' },
+          extraData: JSON.stringify({ user_id: userId }),
+        },
+        (err, data) => {
+          if (err) {
+            item.views_count -= 1;
+            console.error('更新浏览记录失败:', JSON.stringify(err));
+          }
+        }
+      );
+    } catch (err) {
+      console.error('获取用户ID失败:', err);
+    }
   }
 
   // 处理图片选择
@@ -244,7 +260,7 @@ export default struct Antique {
         fs.closeSync(fileTemp);
         console.info('开始上传图片，图片URI:', imageUri_1);
 
-        const uploadUrl: string = 'http://localhost:5000/search_similar';
+        const uploadUrl: string = 'http://192.168.1.103:5000/search_similar';
         const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
           method: http.RequestMethod.POST,
           header: {
