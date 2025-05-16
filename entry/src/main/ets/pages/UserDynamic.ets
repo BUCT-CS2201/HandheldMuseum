@@ -3,6 +3,9 @@ import router from '@ohos.router';
 import http from '@ohos.net.http';
 import { ImageItem, CommentItem, DynamicItem, APIDynamicResponse, APICommentItem } from '../common/types/DynamicTypes';
 import EventHub from '../common/utils/EventHub';
+import { UserStore } from '../common/UserStore';
+import preferences from '@ohos.data.preferences';
+import prompt from '@ohos.prompt';
 
 // 本地图片存储配置
 const LOCAL_IMAGE_BASE = 'file:///data/storage/el2/base/cache/uploads/';
@@ -39,15 +42,42 @@ struct DynamicItemComponent {
   @State replyTo: string = '';
   @State replyToId: number | undefined = undefined;
   @State loadingComments: boolean = false;
-  @State currentUserId: number = 1; // TODO: 从用户状态获取
-  @State currentUsername: string = '当前用户'; // TODO: 从用户状态获取
+  @State currentUserId: number = 0;
+  @State currentUsername: string = '';
   @State showCommentInput: boolean = false;
   @State expandedReplies: Set<number> = new Set();
+  private userPreferences: preferences.Preferences | null = null;
 
-  aboutToAppear() {
+  async aboutToAppear() {
+    await this.initPreferences();
     if (this.showComments) {
       this.loadComments();
     }
+  }
+
+  async initPreferences() {
+    try {
+      this.userPreferences = await preferences.getPreferences(getContext(), 'userInfo');
+      const userId = await this.userPreferences.get('userId', 0) as number;
+      const username = await this.userPreferences.get('username', '') as string;
+      this.currentUserId = userId;
+      this.currentUsername = username;
+    } catch (error) {
+      console.error('初始化偏好设置失败:', error);
+    }
+  }
+
+  showToast(message: string) {
+    prompt.showToast({ message: message });
+  }
+
+  async checkLogin(): Promise<boolean> {
+    if (!this.currentUserId) {
+      this.showToast('请先登录');
+      router.pushUrl({ url: 'pages/Login' });
+      return false;
+    }
+    return true;
   }
 
   async loadComments() {
@@ -73,7 +103,7 @@ struct DynamicItemComponent {
       if (response.responseCode === 200) {
         const commentsData: APICommentItem[] = JSON.parse(response.result as string);
         console.log('解析后的评论数据:', commentsData);
-        
+
         // 直接使用后端返回的评论树结构
         const rootComments = commentsData.map(c => {
           console.log('处理评论项:', c);
@@ -85,7 +115,7 @@ struct DynamicItemComponent {
             c.parent_id,
             c.reply_count
           );
-          
+
           // 递归处理子评论
           if (c.replies && c.replies.length > 0) {
             comment.replies = c.replies.map(reply => {
@@ -117,14 +147,14 @@ struct DynamicItemComponent {
           } else {
             comment.replies = [];
           }
-          
+
           console.log('创建评论对象:', comment);
           return comment;
         });
 
         console.log('最终构建的评论树:', rootComments);
         this.comments = rootComments;
-        
+
         // 强制更新视图
         this.comments = [...this.comments];
       } else {
@@ -139,9 +169,26 @@ struct DynamicItemComponent {
   }
 
   async submitComment() {
-    if (!this.commentText.trim()) return;
+    console.log('submitComment 被调用');
+    
+    if (!await this.checkLogin()) {
+      console.log('用户未登录，退出评论提交');
+      return;
+    }
+    
+    if (!this.commentText.trim()) {
+      console.log('评论内容为空，退出评论提交');
+      return;
+    }
 
     try {
+      console.log('开始提交评论，参数:', {
+        dynamic_id: this.item.id,
+        user_id: this.currentUserId,
+        content: this.commentText,
+        parent_id: this.replyToId
+      });
+
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
         "http://localhost:3000/api/dynamic/comment",
@@ -159,40 +206,31 @@ struct DynamicItemComponent {
         }
       );
 
+      console.log('评论提交响应:', {
+        statusCode: response.responseCode,
+        responseBody: response.result
+      });
+
       if (response.responseCode === 200) {
         const result: CommentResponse = JSON.parse(response.result as string);
-        // 添加新评论
-        const newComment = new CommentItem(
-          result.comment_id,
-          this.currentUsername,
-          this.commentText,
-          new Date().toISOString(),
-          this.replyToId,
-          0
-        );
+        console.log('评论提交成功，返回数据:', result);
 
-        if (this.replyToId) {
-          // 如果是回复，找到父评论并添加回复
-          const parentComment = this.comments.find(c => c.id === this.replyToId);
-          if (parentComment) {
-            parentComment.replies.push(newComment);
-            parentComment.reply_count++;
-          }
-        } else {
-          // 如果是新评论，添加到根评论列表
-          this.comments.push(newComment);
-        }
-        
+        // 重新加载评论列表
+        await this.loadComments();
+
         this.commentText = '';
         this.replyTo = '';
         this.replyToId = undefined;
         this.showCommentInput = false;
+        this.showToast('评论成功');
       } else {
         const errorData: ErrorResponse = JSON.parse(response.result as string);
-        console.error('发表评论失败:', errorData.error);
+        console.error('评论提交失败:', errorData);
+        this.showToast('发表评论失败: ' + errorData.error);
       }
     } catch (error) {
-      console.error('发表评论失败:', error instanceof Error ? error.message : '未知错误');
+      console.error('发表评论失败:', error);
+      this.showToast('发表评论失败');
     }
   }
 
@@ -277,7 +315,8 @@ struct DynamicItemComponent {
               .fontSize(level === 0 ? 12 : 10)
               .fontColor('#007AFF')
               .margin({ left: 16 })
-              .onClick(() => {
+              .onClick(async () => {
+                if (!await this.checkLogin()) return;
                 if (this.replyToId === comment.id) {
                   this.replyTo = '';
                   this.replyToId = undefined;
@@ -430,7 +469,8 @@ struct DynamicItemComponent {
                 .fontColor('#666666')
             }
           }
-          .onClick(() => {
+          .onClick(async () => {
+
             this.showComments = !this.showComments;
             if (this.showComments) {
               this.loadComments();
@@ -486,14 +526,13 @@ struct DynamicItemComponent {
             .height(40)
             .backgroundColor('#F0F0F0')
             .borderRadius(20)
-            .onClick(() => {
+            .onClick(async () => {
+              if (!await this.checkLogin()) return;
               if (this.showCommentInput) {
-                // 如果评论框已经显示，则隐藏它
                 this.showCommentInput = false;
                 this.replyTo = '';
                 this.replyToId = undefined;
               } else {
-                // 否则显示评论框
                 this.showCommentInput = true;
                 this.replyTo = '';
                 this.replyToId = undefined;
@@ -526,9 +565,11 @@ struct DynamicItemComponent {
                     .padding(8)
                     .borderRadius(20)
                     .onChange((value: string) => {
+                      console.log('评论内容变化:', value);
                       this.commentText = value;
                     })
                     .onSubmit(() => {
+                      console.log('触发表单提交');
                       this.submitComment();
                     })
 
@@ -542,12 +583,8 @@ struct DynamicItemComponent {
                     .margin({ left: 8 })
                     .enabled(this.commentText.trim().length > 0)
                     .onClick(() => {
+                      console.log('点击发送按钮，当前评论内容:', this.commentText);
                       this.submitComment();
-                      // 发送后清空输入框并隐藏
-                      this.commentText = '';
-                      this.showCommentInput = false;
-                      this.replyTo = '';
-                      this.replyToId = undefined;
                     })
                 }
                 .width('100%')
@@ -615,14 +652,36 @@ struct UserDynamic {
   @State loading: boolean = true;
   @State errorMessage: string = '';
   @State refreshing: boolean = false;
+  private userPreferences: preferences.Preferences | null = null;
+  @State currentUserId: number = 0;
 
-  aboutToAppear() {
+  async aboutToAppear() {
+    await this.initPreferences();
     this.loadData();
     EventHub.on('dynamic:like', this.handleLike.bind(this));
   }
 
-  aboutToDisappear() {
-    EventHub.off('dynamic:like', this.handleLike.bind(this));
+  async initPreferences() {
+    try {
+      this.userPreferences = await preferences.getPreferences(getContext(), 'userInfo');
+      const userId = await this.userPreferences.get('userId', 0) as number;
+      this.currentUserId = userId;
+    } catch (error) {
+      console.error('初始化偏好设置失败:', error);
+    }
+  }
+
+  showToast(message: string) {
+    prompt.showToast({ message: message });
+  }
+
+  async checkLogin(): Promise<boolean> {
+    if (!this.currentUserId) {
+      this.showToast('请先登录');
+      router.pushUrl({ url: 'pages/Login' });
+      return false;
+    }
+    return true;
   }
 
   async loadData(): Promise<void> {
@@ -837,7 +896,8 @@ struct UserDynamic {
             .backgroundColor('#ff080809')
             .fontWeight(FontWeight.Bold)
             .borderRadius(28)
-            .onClick(() => {
+            .onClick(async () => {
+              if (!await this.checkLogin()) return;
               router.pushUrl({ url: 'pages/DynamicPublish' });
             })
         }
