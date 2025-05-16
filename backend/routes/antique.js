@@ -112,48 +112,35 @@ router.get('/comments/:id', async (req, res) => {
             relic_comment rc
         JOIN
             user u ON rc.user_id = u.user_id
-        LEFT JOIN
-            user_image ui ON rc.user_id = ui.user_id AND ui.status = 1
         WHERE
             rc.relic_id = ? AND rc.is_deleted = 0 AND rc.status = 1
         ORDER BY
             rc.create_time DESC
     `;
-    const start = Date.now();
+    const start = Date.now(); // 记录开始时间，用于计算SQL执行耗时
     try {
-        const results = await mysqlService.query(sql, [id]);
-        console.log('SQL执行耗时:', Date.now() - start, 'ms');
-        res.json(results);
+        const results = await mysqlService.query(sql, [id]); // 执行SQL查询，获取评论数据
+        console.log('SQL执行耗时:', Date.now() - start, 'ms'); // 打印SQL查询耗时
+        console.log('评论接口返回结果:', results); // 打印查询到的评论结果，便于调试
+        res.json(results); // 将评论数据以JSON格式返回给前端
     } catch (err) {
-        console.error('查询评论失败:', err);
-        res.status(500).json({ error: '数据库查询失败' });
+        console.error('查询评论失败:', err); // 打印错误信息
+        res.status(500).json({ error: '数据库查询失败' }); // 返回500错误和错误信息给前端
     }
 });
 
 // 提交评论
 router.post('/upload_comments/:id', async (req, res) => {
-    // 输出请求的详细信息
-    console.log('接收到评论提交请求');
-    console.log('请求参数:', req.params);
-    console.log('请求体:', req.body);
+    const relicId = req.params.id;
+    const { user_id, content, parent_id } = req.body;
 
-    const relicId = req.params.id; // 从路由参数中获取 relic_id
-    const { user_id, content, parent_id } = req.body; // 从请求体中获取用户ID、评论内容和父评论ID
-
-    // 输出获取到的参数值
-    console.log('文物ID (relic_id):', relicId);
-    console.log('用户ID (user_id):', user_id);
-    console.log('评论内容 (content):', content);
-    console.log('父评论ID (parent_id):', parent_id);
+    if (!user_id || user_id == 0) {
+        return res.status(400).json({ error: '用户未登录或user_id无效' });
+    }
 
     const sql = 'INSERT INTO relic_comment (relic_id, user_id, content, parent_id) VALUES (?, ?, ?, ?)';
 
-    // 输出即将执行的 SQL 语句和参数
-    console.log('即将执行的 SQL 语句:', sql);
-    console.log('SQL 参数:', [relicId, user_id, content, parent_id]);
-
     const results = await mysqlService.query(sql, [relicId, user_id, content, parent_id]);
-    console.log(results);
     res.json({ comment_id: results.insertId });
 });
 

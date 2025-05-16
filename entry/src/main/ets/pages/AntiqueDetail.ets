@@ -83,8 +83,8 @@ interface LikeCountResult {
 // 评论树类型
 class CommentTreeItem {
   comment: CommentItem;
-  replies: CommentItem[];
-  constructor(comment: CommentItem, replies: CommentItem[]) {
+  replies: CommentTreeItem[];
+  constructor(comment: CommentItem, replies: CommentTreeItem[]) {
     this.comment = comment;
     this.replies = replies;
   }
@@ -130,15 +130,19 @@ struct AntiqueDetail {
   @State selectedImages: string[] = []; // 用于存储选择的图片URI
   private userPreferences: preferences.Preferences | null = null;
 
+  // 每次页面显示时，自动初始化和加载所有页面需要的数据和状态，确保用户看到的是最新的内容。
   aboutToAppear() {
-    this.initPreferences();
-    const params = router.getParams() as RouterParams;
-    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
-    console.log('aboutToAppear被调用，relicId:', relicId);
-    if (relicId > 0) {
-      this.fetchAntiqueDetail(relicId);
-      this.fetchComments(relicId);
-      this.checkLikeAndFavoriteStatus();
+    this.initPreferences(); // 初始化用户偏好设置（如获取本地存储的用户信息）
+
+    const params = router.getParams() as RouterParams; // 获取路由参数（如页面跳转时传递的文物id）
+    const relicId: number = params?.id ? parseInt(params.id.toString()) : 0; // 解析文物id，若无则为0
+
+    console.log('aboutToAppear被调用，relicId:', relicId); // 打印日志，便于调试
+
+    if (relicId > 0) { // 如果文物id有效
+      this.fetchAntiqueDetail(relicId); // 获取文物详情
+      this.fetchComments(relicId); // 获取该文物下的评论
+      this.checkLikeAndFavoriteStatus(); // 检查当前用户对该文物的点赞和收藏状态
     }
   }
 
@@ -239,7 +243,7 @@ struct AntiqueDetail {
   fetchComments(id: number): void {
     console.log('fetchComments被调用，id:', id);
     const httpRequest = http.createHttp();
-    const url = `http://10.4.77.43:3000/api/antique/comments/${id}`;
+    const url = `http://localhost:3000/api/antique/comments/${id}`;
     httpRequest.request(
       url,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
@@ -248,25 +252,30 @@ struct AntiqueDetail {
           console.error('请求评论失败:', JSON.stringify(err));
           return;
         }
+        
+        // 添加调试日志
         console.log('评论接口返回:', JSON.stringify(data.result));
+        
         let commentArr: CommentItem[] = [];
         if (typeof data.result === 'string') {
           commentArr = JSON.parse(data.result) as CommentItem[];
         } else if (typeof data.result === 'object') {
           commentArr = data.result as CommentItem[];
         }
+        
+        // 添加调试日志
+        console.log('解析后的评论数组:', commentArr);
+        
         // 只保留 status=1 且 is_deleted=0 的评论
         commentArr = commentArr.filter(c => c.status === 1 && c.is_deleted === 0);
+        
+        // 添加调试日志
+        console.log('过滤后的评论数组:', commentArr);
+        
         setTimeout(() => {
           this.comments = commentArr;
-          // 构建评论树
-          const topLevel = this.comments.filter((c: CommentItem) => c.parent_id == null || c.parent_id === 0);
-          this.commentTree = topLevel.map((parent: CommentItem) => {
-            return new CommentTreeItem(
-              parent,
-              this.comments.filter((c: CommentItem) => c.parent_id === parent.comment_id)
-            );
-          });
+          this.commentTree = buildCommentTree(this.comments, null);
+          console.log('最终评论树:', this.commentTree);
         }, 0);
       }
     );
@@ -317,7 +326,7 @@ struct AntiqueDetail {
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
     if (relicId > 0 && this.commentContent) {
         const httpRequest2 = http.createHttp();
-        const url = `http://10.4.77.43:3000/api/antique/upload_comments/${relicId}`; // 确保包含 relicId
+        const url = `http://localhost:3000/api/antique/upload_comments/${relicId}`; // 确保包含 relicId
         const response: FetchResult = await httpRequest2.request(url, {
             method: http.RequestMethod.POST,
             header: { 'Content-Type': 'application/json' },
@@ -352,7 +361,7 @@ struct AntiqueDetail {
         return; // 没有选择图片
     }
 
-    const uploadUrl: string = 'http://10.4.77.43:5000/upload_image'; // 假设这是上传图片的接口
+    const uploadUrl: string = 'http://localhost:5000/upload_image'; // 假设这是上传图片的接口
     const httpRequest: http.HttpRequest = http.createHttp();
 
     this.selectedImages.map( async (imageUri) => {
@@ -393,7 +402,7 @@ struct AntiqueDetail {
       return; // 退出函数
     }
     const httpRequest = http.createHttp();
-    const url = `http://10.4.77.43:3000/api/antique/comments/like/${comment_id}`;
+    const url = `http://localhost:3000/api/antique/comments/like/${comment_id}`;
     httpRequest.request(
       url,
       {
@@ -429,7 +438,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://10.4.77.43:3000/api/antique/like/${relicId}`,
+      `http://localhost:3000/api/antique/like/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -469,7 +478,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://10.4.77.43:3000/api/antique/favorite/${relicId}`,
+      `http://localhost:3000/api/antique/favorite/${relicId}`,
       {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -502,7 +511,7 @@ struct AntiqueDetail {
 
     const httpRequest = http.createHttp();
     httpRequest.request(
-      `http://10.4.77.43:3000/api/antique/status/${relicId}?user_id=${userId}`,
+      `http://localhost:3000/api/antique/status/${relicId}?user_id=${userId}`,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
       (err: Error | undefined, data: FetchResult) => {
         if (err) {
@@ -722,206 +731,219 @@ struct AntiqueDetail {
                       })
 
                       // 评论区域
-                      Column() {
-                        Text('评论')
-                          .fontSize(20)
-                          .fontWeight(FontWeight.Bold)
-                          .margin({ top: 12, left: 12, bottom: 8 })
-                          .fontColor('#333333');
-
-                        // 评论列表容器
+                      Scroll() {
                         Column() {
-                          ForEach(this.commentTree, (item: CommentTreeItem) => {
-                            Column() {
+                          Text('评论')
+                            .fontSize(20)
+                            .fontWeight(FontWeight.Bold)
+                            .margin({ top: 12, left: 0, bottom: 8 })
+                            .fontColor('#333333');
+
+                          // 评论列表容器
+                          Column() {
+                            ForEach(this.commentTree, (item: CommentTreeItem) => {
                               // 父评论
                               Row() {
+                                // 头像
+                                Image($r('app.media.avatar_default'))
+                                  .width(36)
+                                  .height(36)
+                                  .borderRadius(18)
+                                  .backgroundColor('#FFF')
+                                  .margin({ right: 8, left: 0, top: 0, bottom: 0 })
+                                // 内容区
                                 Column() {
-                                  Text(item.comment.user_name)
+                                  Row() {
+                                    Text(item.comment.user_name)
+                                      .fontWeight(FontWeight.Bold)
+                                      .fontSize(15)
+                                      .fontColor('#007BFF')
+                                    Text(item.comment.create_time.split('T')[0])
+                                      .fontSize(11)
+                                      .fontColor('#999')
+                                      .margin({ left: 8 })
+                                  }
+                                  Text(item.comment.content)
                                     .fontSize(14)
-                                    .fontWeight(FontWeight.Bold)
-                                    .fontColor('#007BFF');
-                                  Text(item.comment.create_time)
-                                    .fontSize(12)
-                                    .fontColor('#666666');
+                                    .fontColor('#222')
+                                    .margin({ top: 2, bottom: 2 })
                                 }
                                 .flexGrow(1)
-
-                                // 点赞区域
-                                Row() {
+                                // 按钮区（固定宽度）
+                                Row({ space: 8 }) {
+                                  Button({ type: ButtonType.Circle }) {
+                                    Image($r('app.media.like'))
+                                      .width(18)
+                                      .height(18)
+                                  }
+                                  .onClick(() => this.likeComment(item.comment.comment_id))
+                                  .width(28)
+                                  .height(28)
+                                  .backgroundColor('transparent')
                                   Text(item.comment.like_count.toString())
                                     .fontSize(12)
-                                    .margin({ right: 4 });
-                                  Button('点赞')
+                                    .fontColor('#999')
+                                    .textAlign(TextAlign.Center)
+                                    .margin({ left: 2, right: 8 })
+                                  Button('回复')
                                     .onClick(() => {
-                                      this.likeComment(item.comment.comment_id);
+                                      this.replyParentId = item.comment.comment_id;
+                                      this.commentContent = `@${item.comment.user_name} `;
                                     })
-                                    .width(60)
-                                    .height(30)
-                                    .backgroundColor('#F5F5F5')
-                                    .borderRadius(15)
                                     .fontSize(12)
-                                    .fontColor('#666666');
+                                    .fontColor('#666')
+                                    .backgroundColor('transparent')
+                                    .padding({ left: 6, right: 6 })
                                 }
+                                .width(80) // 固定按钮区宽度
+                                .align(Alignment.Center)
                               }
-                              .margin({ bottom: 8 })
-                              .padding(10)
-                              .backgroundColor('#FFFFFF')
-                              .borderRadius(10)
+                              .margin({ bottom: 10, left: 0, right: 0 })
 
-                              // 评论内容
-                              Text(item.comment.content)
-                                .fontSize(14)
-                                .lineHeight(20)
-                                .fontColor('#444444')
-                                .margin({ top: 4, left: 12, right: 12 });
-
-                              // 回复按钮
-                              Button('回复')
-                                .onClick(() => {
-                                  this.replyParentId = item.comment.comment_id;
-                                  this.commentContent = `@${item.comment.user_name} `;
-                                })
-                                .width(60)
-                                .height(30)
-                                .backgroundColor('#F5F5F5')
-                                .borderRadius(15)
-                                .fontSize(12)
-                                .fontColor('#666666')
-                                .margin({ left: 12, top: 4 });
-                            }
-                            .margin({ bottom: 12 })
-                            .backgroundColor('#F9F9F9')
-                            .borderRadius(10)
-                            .padding(10);
-                            
-                            // 子评论
-                            ForEach(item.replies, (reply: CommentItem) => {
-                              Column() {
+                              // 子评论
+                              ForEach(item.replies, (reply: CommentTreeItem) => {
                                 Row() {
+                                  // 头像
+                                  Image($r('app.media.avatar_default'))
+                                    .width(28)
+                                    .height(28)
+                                    .borderRadius(14)
+                                    .backgroundColor('#FFF')
+                                    .margin({ right: 8, left: 0, top: 0, bottom: 0 })
+                                  // 内容区
                                   Column() {
-                                    Text(reply.user_name)
-                                      .fontSize(12)
-                                      .fontWeight(FontWeight.Bold)
-                                      .fontColor('#007BFF');
-                                    Text(reply.create_time)
-                                      .fontSize(10)
-                                      .fontColor('#666666');
+                                    Row() {
+                                      Text(reply.comment.user_name)
+                                        .fontWeight(FontWeight.Bold)
+                                        .fontSize(13)
+                                        .fontColor('#007BFF')
+                                      Text(reply.comment.create_time.split('T')[0])
+                                        .fontSize(10)
+                                        .fontColor('#999')
+                                        .margin({ left: 8 })
+                                    }
+                                    Text(reply.comment.content)
+                                      .fontSize(13)
+                                      .fontColor('#222')
+                                      .margin({ top: 2, bottom: 2 })
                                   }
                                   .flexGrow(1)
-
-                                  // 点赞区域
-                                  Row() {
-                                    Text(reply.like_count.toString())
-                                      .fontSize(12)
-                                      .margin({ right: 4 });
-                                    Button('点赞')
+                                  // 按钮区（固定宽度，与父评论一致）
+                                  Row({ space: 8 }) {
+                                    Button({ type: ButtonType.Circle }) {
+                                      Image($r('app.media.like'))
+                                        .width(16)
+                                        .height(16)
+                                    }
+                                    .onClick(() => this.likeComment(reply.comment.comment_id))
+                                    .width(24)
+                                    .height(24)
+                                    .backgroundColor('transparent')
+                                    Text(reply.comment.like_count.toString())
+                                      .fontSize(11)
+                                      .fontColor('#999')
+                                      .textAlign(TextAlign.Center)
+                                      .margin({ left: 2, right: 8 })
+                                    Button('回复')
                                       .onClick(() => {
-                                        this.likeComment(reply.comment_id);
+                                        this.replyParentId = reply.comment.comment_id;
+                                        this.commentContent = `@${reply.comment.user_name} `;
                                       })
-                                      .width(60)
-                                      .height(30)
-                                      .backgroundColor('#F5F5F5')
-                                      .borderRadius(15)
                                       .fontSize(12)
-                                      .fontColor('#666666');
+                                      .fontColor('#666')
+                                      .backgroundColor('transparent')
+                                      .padding({ left: 6, right: 6 })
                                   }
+                                  .width(80) // 固定按钮区宽度
+                                  .align(Alignment.Center)
                                 }
-                                .margin({ bottom: 8 })
-                                .padding(10)
-                                .backgroundColor('#FFFFFF')
-                                .borderRadius(10)
-
-                                // 评论内容
-                                Text(reply.content)
-                                  .fontSize(12)
-                                  .lineHeight(20)
-                                  .fontColor('#444444')
-                                  .margin({ top: 4, left: 12, right: 12 });
-                              }
-                              .margin({ bottom: 12, left: 30 })
-                              .backgroundColor('#F9F9F9')
-                              .borderRadius(10)
-                              .padding(10);
-                            });
-                          })
+                                .margin({ left: 16, bottom: 8, right: 0 }) // 适度缩进
+                              })
+                            })
+                          }
                         }
                         .width('100%')
-                        .backgroundColor('#F5F5F5')
-                        .padding(12);
+                        .backgroundColor('#FFF')
+                        .padding({ left: 0, right: 0, top: 8, bottom: 8 })
                       }
                     }
                   }
                 }
-                .padding({ bottom: 70 }) // 让出底部空间，避免内容被底栏遮住
+                .padding({ bottom: 110 }) // 让出更多底部空间，确保评论完整显示
               }
 
               // 固定底部栏
-              Row({ space: 8 }) {
-                // 选择图片按钮
-                Button('选择图片')
-                  .onClick(() => {
-                    this.handleImageSearch(); // 处理图片选择
-                  })
-                  .width(80)
-                  .height(40)
-                  .backgroundColor('#DAA520')
-                  .borderRadius(20)
-                  .fontSize(14)
-                  .fontColor('#FFFFFF');
+              Row({ space: 6 }) {
+                // 图片按钮
+                Button({ type: ButtonType.Circle }) {
+                  Image($r('app.media.ic_image'))
+                    .width(22)
+                    .height(22)
+                }
+                .onClick(() => { this.handleImageSearch(); })
+                .width(36)
+                .height(36)
+                .backgroundColor('transparent')
 
-                // 评论输入框
+                // 评论输入框（固定宽度，防止撑满）
                 TextInput({ placeholder: '发表评论...' })
-                  .onChange((value: string) => {
-                    this.commentContent = value;
-                  })
+                  .onChange((value: string) => { this.commentContent = value; })
                   .type(InputType.Normal)
-                  .height(40)
-                  .borderRadius(20)
+                  .height(36)
+                  .borderRadius(18)
                   .padding({ left: 12 })
                   .backgroundColor('#FFFFFF')
-                  .margin({ left: 12 })
-                  .width('200.00vp');
+                  .margin({ left: 2, right: 2 })
+                  .width('55%')
 
-                // 评论按钮
-                Button('评论')
-                  .onClick(() => {
-                    this.submitComment();
-                  })
-                  .width(60)
-                  .height(40)
-                  .backgroundColor('#DAA520')
-                  .borderRadius(20)
-                  .fontSize(14)
-                  .fontColor('#FFFFFF');
+                // 发送按钮
+                Button({ type: ButtonType.Circle }) {
+                  Image($r('app.media.ic_send'))
+                    .width(22)
+                    .height(22)
+                }
+                .onClick(() => { this.submitComment(); })
+                .width(36)
+                .height(36)
+                .backgroundColor('transparent')
 
                 // 点赞按钮+数字
-                Row({ space: 4 }) {
+                Row({ space: 2 }) {
                   Button({ type: ButtonType.Circle }) {
                     Image(this.isLiked ? $r('app.media.like_filled') : $r('app.media.like'))
-                      .width(24)
-                      .height(24);
+                      .width(22)
+                      .height(22)
                   }
                   .onClick(() => this.likeAntique())
-                  .width(40)
-                  .height(40)
-                  .backgroundColor('#F5F5F5');
-
+                  .width(36)
+                  .height(36)
+                  .backgroundColor('#F5F5F5')
                   Text(this.likeCount.toString())
-                    .fontSize(16)
+                    .fontSize(15)
                     .fontColor('#666666')
-                    .width(32)
-                    .textAlign(TextAlign.Center);
+                    .width(22)
+                    .textAlign(TextAlign.Center)
                 }
-                .padding({ right: 12 });
+                .margin({ right: 8 })
               }
               .width('100%')
               .height(56)
               .backgroundColor('#F5F5F5')
               .position({ x: 0, y: '100%' })
               .translate({ y: -56 })
+              .shadow({ radius: 8, color: '#EEE' })
             }
             .width('100%')
             .height('100%')
             .backgroundColor('#F7F8FA')
           }
         }
+
+function buildCommentTree(comments: CommentItem[], parentId: number | null = null): CommentTreeItem[] {
+  return comments
+    .filter((c: CommentItem) => (c.parent_id == null ? null : c.parent_id) === parentId)
+    .map((parent: CommentItem) => {
+      const replies: CommentTreeItem[] = buildCommentTree(comments, parent.comment_id);
+      return new CommentTreeItem(parent, replies);
+    });
+}
