@@ -53,8 +53,10 @@ struct DynamicPublish {
             .placeholderColor('#999999')
             .caretColor('#007AFF')
             .onChange((value: string) => {
+              console.info('TextInput 内容变化:', value)
               this.showPlaceholder = value === ''
               this.content = value
+              console.info('更新后的 content:', this.content)
             })
             .onEditChange((isEditing: boolean) => {
               this.hasFocus = isEditing
@@ -102,10 +104,10 @@ struct DynamicPublish {
 
       Button('发布')
         .fontSize(16)
-        .fontColor(this.canPublish ? '#007AFF' : '#999999')
+        .fontColor((this.content.trim().length > 0 || this.selectedImages.length > 0) ? '#007AFF' : '#999999')
         .margin({ right: 16 })
         .backgroundColor(Color.Transparent)
-        .enabled(this.canPublish && !this.publishLoading)
+        .enabled((this.content.trim().length > 0 || this.selectedImages.length > 0) && !this.publishLoading)
         .onClick(() => this.publishDynamic())
     }
     .height(56)
@@ -181,10 +183,6 @@ struct DynamicPublish {
     .justifyContent(FlexAlign.Start)
   }
 
-  private get canPublish(): boolean {
-    return this.content.trim().length > 0 || this.selectedImages.length > 0
-  }
-
   private async pickImages() {
     try {
       const options = new picker.PhotoSelectOptions()
@@ -193,7 +191,7 @@ struct DynamicPublish {
 
       const photoPicker = new picker.PhotoViewPicker()
       const result = await photoPicker.select(options)
-      
+
       if (result && result.photoUris && Array.isArray(result.photoUris)) {
         // 确保不超过9张图片
         const remainingSlots = 9 - this.selectedImages.length
@@ -210,7 +208,9 @@ struct DynamicPublish {
   }
 
   private async publishDynamic() {
-    if (!this.canPublish) {
+    console.info('开始发布动态')
+    if (!(this.content.trim().length > 0 || this.selectedImages.length > 0)) {
+      console.info('发布条件不满足')
       this.showError = true;
       this.errorMessage = '请输入内容或选择图片';
       return;
@@ -226,7 +226,7 @@ struct DynamicPublish {
 
       // 1. 提交动态内容（使用与评论相同的接口）
       const httpRequest = http.createHttp();
-      const url = 'http://10.4.77.43:3000/api/antique/upload_comments/0'; // relicId 设为 0 表示动态
+      const url = 'http://localhost:3000/api/antique/upload_comments/0'; // relicId 设为 0 表示动态
       const response: FetchResult = await httpRequest.request(url, {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -234,14 +234,14 @@ struct DynamicPublish {
         extraData: JSON.stringify({
           user_id: userId,
           content: this.content,
-          parent_id: null
+          parent_id: 0
         })
       }) as FetchResult;
 
       // 2. 处理响应并上传图片
       if (response && response.result && typeof response.result === 'object') {
         const commentId = (response.result as GeneratedTypeLiteralInterface_2).comment_id;
-        
+
         // 3. 上传图片（使用Python Flask接口）
         if (this.selectedImages.length > 0) {
           await this.uploadImagesWithCommentId(commentId);
@@ -270,19 +270,24 @@ struct DynamicPublish {
     }
 
     // 使用Python Flask接口上传图片
-    const uploadUrl: string = 'http://10.4.77.43:5000/upload_image';
+    const uploadUrl: string = 'http://localhost:5000/upload_image';
     const httpRequest: http.HttpRequest = http.createHttp();
+
+    console.info('准备上传图片，selectedImages:', JSON.stringify(this.selectedImages));
 
     for (const imageUri of this.selectedImages) {
       try {
+        console.info('原始 imageUri:', imageUri);
         // 读取图片文件
         let resultPhoto = fs.openSync(imageUri, fs.OpenMode.READ_ONLY);
+        console.info('resultPhoto:', JSON.stringify(resultPhoto));
         let fileTemp = fs.openSync(getContext().filesDir + resultPhoto.name, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
+        console.info('fileTemp:', JSON.stringify(fileTemp));
         let imageUri_1: string = fileTemp.path;
         fs.copyFileSync(resultPhoto.fd, fileTemp.fd);
         fs.closeSync(resultPhoto);
         fs.closeSync(fileTemp);
-        console.info('开始上传图片，图片URI:', imageUri_1);
+        console.info('最终上传路径 imageUri_1:', imageUri_1);
 
         // 使用Python Flask接口上传图片
         const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
@@ -303,6 +308,8 @@ struct DynamicPublish {
             },
           ],
         });
+
+        console.info('上传返回:', JSON.stringify(response));
 
         if (response.responseCode !== 200) {
           throw new Error('图片上传失败');

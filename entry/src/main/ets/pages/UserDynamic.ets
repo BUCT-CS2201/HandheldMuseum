@@ -897,7 +897,7 @@ struct UserDynamic {
             .fontWeight(FontWeight.Bold)
             .borderRadius(28)
             .onClick(async () => {
-              if (!await this.checkLogin()) return;
+               if (!await this.checkLogin()) return;
               router.pushUrl({ url: 'pages/DynamicPublish' });
             })
         }

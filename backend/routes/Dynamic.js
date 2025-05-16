@@ -304,7 +304,7 @@ router.get('/comments/:dynamicId', async (req, res) => {
   try {
     const { dynamicId } = req.params;
     console.log('获取评论列表，动态ID:', dynamicId);
-    
+
     // 查询该动态下所有评论（不加parent_id条件，支持多级）
     const sql = `
       SELECT 
@@ -322,11 +322,11 @@ router.get('/comments/:dynamicId', async (req, res) => {
         AND c.status = 1
       ORDER BY c.create_time ASC
     `;
-    
+
     console.log('执行查询SQL:', sql);
     const comments = await mysqlService.query(sql);
     console.log('查询结果:', comments);
-    
+
     // 处理评论层级关系
     const commentMap = new Map();
     const rootComments = [];
@@ -350,11 +350,11 @@ router.get('/comments/:dynamicId', async (req, res) => {
         }
       }
     });
-    
+
     res.json(rootComments);
   } catch (err) {
     console.error('获取评论失败，详细错误:', err);
-    res.status(500).json({ 
+    res.status(500).json({
       error: '获取评论失败',
       details: err.message || '未知错误'
     });
@@ -380,7 +380,7 @@ router.post('/comment', async (req, res) => {
       WHERE comment_id = ? AND relic_id = 0 AND is_deleted = 0
     `;
     const [dynamic] = await mysqlService.query(checkDynamicSql, [dynamic_id]);
-    
+
     if (!dynamic) {
       console.log('动态不存在:', dynamic_id);
       return res.status(404).json({ error: '动态不存在' });
@@ -394,7 +394,7 @@ router.post('/comment', async (req, res) => {
         WHERE comment_id = ? AND relic_id = 0 AND is_deleted = 0
       `;
       const [parent] = await mysqlService.query(checkParentSql, [parent_id]);
-      
+
       if (!parent) {
         console.log('父评论不存在:', parent_id);
         return res.status(404).json({ error: '父评论不存在' });
@@ -434,7 +434,7 @@ router.post('/comment', async (req, res) => {
     });
   } catch (err) {
     console.error('评论发布失败，详细错误:', err);
-    res.status(500).json({ 
+    res.status(500).json({
       error: '评论发布失败',
       details: err.message || '未知错误'
     });
