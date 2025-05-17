@@ -138,29 +138,57 @@ struct UserProfile {
 
             // 信息列表
             List() {
-              ListItem() {
-                this.InfoItem('用户名', this.userInfo.name, false)
+              if(this.isEditing) {
+                ListItem() {
+                  this.InfoItem('用户名', this.userInfo.name, true)
+                }
+                ListItem() {
+                  this.InfoItem('手机号', this.userInfo.phone_number, false)
+                }
+                ListItem() {
+                  this.InfoItem('性别', this.userInfo.gender === 1 ? '男' : '女', true)
+                }
+                ListItem() {
+                  this.InfoItem('年龄', this.userInfo.age?.toString() || '', true)
+                }
+                ListItem() {
+                  this.InfoItem('地址', this.userInfo.address || '', true)
+                }
+                ListItem() {
+                  this.InfoItem('微信号', this.userInfo.wechat || '', true)
+                }
+                ListItem() {
+                  this.InfoItem('QQ号', this.userInfo.qq || '', true)
+                }
+                ListItem() {
+                  this.InfoItem('个人简介', this.userInfo.description || '', true)
+                }
               }
-              ListItem() {
-                this.InfoItem('手机号', this.userInfo.phone_number, false)
-              }
-              ListItem() {
-                this.InfoItem('性别', this.userInfo.gender === 1 ? '男' : '女', this.isEditing)
-              }
-              ListItem() {
-                this.InfoItem('年龄', this.userInfo.age?.toString() || '', this.isEditing)
-              }
-              ListItem() {
-                this.InfoItem('地址', this.userInfo.address || '', this.isEditing)
-              }
-              ListItem() {
-                this.InfoItem('微信号', this.userInfo.wechat || '', this.isEditing)
-              }
-              ListItem() {
-                this.InfoItem('QQ号', this.userInfo.qq || '', this.isEditing)
-              }
-              ListItem() {
-                this.InfoItem('个人简介', this.userInfo.description || '', this.isEditing)
+              else {
+                ListItem() {
+                  this.InfoItem('用户名', this.userInfo.name, false)
+                }
+                ListItem() {
+                  this.InfoItem('手机号', this.userInfo.phone_number, false)
+                }
+                ListItem() {
+                  this.InfoItem('性别', this.userInfo.gender === 1 ? '男' : '女', false)
+                }
+                ListItem() {
+                  this.InfoItem('年龄', this.userInfo.age?.toString() || '', false)
+                }
+                ListItem() {
+                  this.InfoItem('地址', this.userInfo.address || '', false)
+                }
+                ListItem() {
+                  this.InfoItem('微信号', this.userInfo.wechat || '', false)
+                }
+                ListItem() {
+                  this.InfoItem('QQ号', this.userInfo.qq || '', false)
+                }
+                ListItem() {
+                  this.InfoItem('个人简介', this.userInfo.description || '', false)
+                }
               }
             }
             .width('100%')
