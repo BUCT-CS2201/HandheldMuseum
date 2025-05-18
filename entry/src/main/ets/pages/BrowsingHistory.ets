@@ -118,14 +118,22 @@ struct BrowsingHistory {
                 Column() {
                   Text(item.name)
                     .fontSize(16)
+                    .flexShrink(1)// 允许收缩
+                    .textAlign(TextAlign.Start)
+                    .maxLines(null)
+                    .textOverflow({ overflow: TextOverflow.None })
+                    .width('100%')
                     .margin({ bottom: 4 });
 
                   Text(formatDateTime(item.browseTime))
                     .fontSize(12)
                     .fontColor('#666666');
                 }
+                .width('100%')
+                .flexGrow(1)
+                .flexShrink(1)
                 .alignItems(HorizontalAlign.Start)
-                .margin({ left: 16 })
+                .margin({ left: 16, right:10 })
                 .alignSelf(ItemAlign.Center);
               }
               .width('100%')

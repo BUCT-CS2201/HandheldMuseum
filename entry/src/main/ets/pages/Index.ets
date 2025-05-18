@@ -93,7 +93,7 @@ struct Index {
       console.info('开始请求用户信息, userId:', userId);
 
       httpRequest.request(
-        `http://localhost:3000/api/user/info/${userId}`,
+        `http://192.168.1.103:3000/api/user/info/${userId}`,
         {
           method: http.RequestMethod.GET,
           header: {

@@ -30,69 +30,119 @@ router.get('/list', (req, res) => {
         res.json(results);
     });
 });
+
 // 点赞接口
-router.post('/like/:id', (req, res) => {
+router.post('/like/:id', async (req, res) => {
+    console.log('收到点赞请求', req.params.id, req.body);
     const id = req.params.id;
     const { user_id } = req.body;
 
-    // 先检查是否已经点赞
-    const checkSql = 'SELECT COUNT(*) as count FROM relic_like WHERE relic_id = ? AND user_id = ?';
-    mysqlService.query(checkSql, [id, user_id], (err, results) => {
-        if (err) {
-            console.error('检查点赞状态失败:', err);
-            return res.status(500).json({ error: '数据库查询失败' });
-        }
+    try {
+        // 先检查是否已经点赞
+        console.log('[like]检查是否已点赞');
+        const checkSql = 'SELECT COUNT(*) as count FROM relic_like WHERE relic_id = ? AND user_id = ?';
+        const results = await mysqlService.query(checkSql, [id, user_id]);
+        console.log('[like]检查是否已点赞完成');
 
         const hasLiked = results[0].count > 0;
+        console.log('用户', user_id, hasLiked ? '已点赞' : '未点赞', '文物', id);
+
         if (hasLiked) {
             // 取消点赞
+            console.log('[like]执行取消点赞操作');
             const deleteSql = 'DELETE FROM relic_like WHERE relic_id = ? AND user_id = ?';
+            await mysqlService.query(deleteSql, [id, user_id]);
+            console.log('[like]删除点赞记录完成');
+
             const updateSql = 'UPDATE cultural_relic SET likes_count = likes_count - 1 WHERE relic_id = ?';
-            mysqlService.query(deleteSql, [id, user_id], (err) => {
-                if (err) {
-                    console.error('取消点赞失败:', err);
-                    return res.status(500).json({ error: '数据库操作失败' });
-                }
-                mysqlService.query(updateSql, [id], (err) => {
-                    if (err) {
-                        console.error('更新点赞数失败:', err);
-                        return res.status(500).json({ error: '数据库操作失败' });
-                    }
-                    const getCountSql = 'SELECT likes_count as like_count FROM cultural_relic WHERE relic_id = ?';
-                    mysqlService.query(getCountSql, [id], (err, results) => {
-                        if (err) {
-                            return res.status(500).json({ error: '查询点赞数失败' });
-                        }
-                        res.json({ like_count: results[0].like_count });
-                    });
-                });
-            });
+            await mysqlService.query(updateSql, [id]);
+            console.log('[like]更新文物点赞数 (-1) 完成');
+
+            const getCountSql = 'SELECT likes_count as like_count FROM cultural_relic WHERE relic_id = ?';
+            const countResults = await mysqlService.query(getCountSql, [id]);
+            console.log('[like]获取最新点赞数完成');
+
+            res.json({ like_count: countResults[0].like_count });
+            console.log('[like]取消点赞响应发送');
+
         } else {
             // 添加点赞
+            console.log('[like]执行添加点赞操作');
             const insertSql = 'INSERT INTO relic_like (relic_id, user_id) VALUES (?, ?)';
+            await mysqlService.query(insertSql, [id, user_id]);
+            console.log('[like]插入点赞记录完成');
+
             const updateSql = 'UPDATE cultural_relic SET likes_count = likes_count + 1 WHERE relic_id = ?';
-            mysqlService.query(insertSql, [id, user_id], (err) => {
-                if (err) {
-                    console.error('添加点赞失败:', err);
-                    return res.status(500).json({ error: '数据库操作失败' });
-                }
-                mysqlService.query(updateSql, [id], (err) => {
-                    if (err) {
-                        console.error('更新点赞数失败:', err);
-                        return res.status(500).json({ error: '数据库操作失败' });
-                    }
-                    const getCountSql = 'SELECT likes_count as like_count FROM cultural_relic WHERE relic_id = ?';
-                    mysqlService.query(getCountSql, [id], (err, results) => {
-                        if (err) {
-                            return res.status(500).json({ error: '查询点赞数失败' });
-                        }
-                        res.json({ like_count: results[0].like_count });
-                    });
-                });
-            });
+            await mysqlService.query(updateSql, [id]);
+            console.log('[like]更新文物点赞数 (+1) 完成');
+
+            const getCountSql = 'SELECT likes_count as like_count FROM cultural_relic WHERE relic_id = ?';
+            const countResults = await mysqlService.query(getCountSql, [id]);
+            console.log('[like]获取最新点赞数完成');
+
+            res.json({ like_count: countResults[0].like_count });
+            console.log('[like]添加点赞响应发送');
         }
-    });
+
+    } catch (err) {
+        console.error('点赞操作失败:', err);
+        res.status(500).json({ error: '服务器内部错误' });
+        console.error('点赞操作失败响应发送');
+    }
 });
+
+// 收藏接口
+router.post('/favorite/:id', async (req, res) => {
+    console.log('收到收藏请求', req.params.id, req.body);
+    const id = req.params.id;
+    const { user_id } = req.body;
+
+    try {
+        // 先检查是否已经点赞
+        console.log('检查是否已收藏');
+        const checkSql = 'SELECT COUNT(*) as count FROM user_favorite WHERE relic_id = ? AND user_id = ?';
+        const results = await mysqlService.query(checkSql, [id, user_id]);
+        console.log('检查是否已收藏完成');
+
+        const hasFavorited = results[0].count > 0;
+        console.log('用户', user_id, hasFavorited ? '已收藏' : '未收藏', '文物', id);
+
+        if (hasFavorited) {
+            // 取消点赞
+            console.log('执行取消收藏操作');
+            const deleteSql = 'DELETE FROM user_favorite WHERE relic_id = ? AND user_id = ?';
+            await mysqlService.query(deleteSql, [id, user_id]);
+            console.log('删除收藏记录完成');
+
+            const getCountSql = 'SELECT COUNT(*) as favorite_count FROM user_favorite WHERE relic_id = ?';
+            const countResults = await mysqlService.query(getCountSql, [id]);
+            console.log('获取最新收藏数完成');
+
+            res.json({ favorite_count: countResults[0].favorite_count });
+            console.log('取消收藏响应发送');
+
+        } else {
+            // 添加点赞
+            console.log('执行添加收藏操作');
+            const insertSql = 'INSERT INTO user_favorite (user_id, relic_id, favorite_type) VALUES (?, ?, 1)';
+            await mysqlService.query(insertSql, [user_id, id]);
+            console.log('插入收藏记录完成');
+
+            const getCountSql = 'SELECT COUNT(*) as favorite_count FROM user_favorite WHERE relic_id = ?';
+            const countResults = await mysqlService.query(getCountSql, [id]);
+            console.log('获取最新收藏数完成');
+
+            res.json({ favorite_count: countResults[0].favorite_count });
+            console.log('添加收藏响应发送');
+        }
+
+    } catch (err) {
+        console.error('收藏操作失败:', err);
+        res.status(500).json({ error: '服务器内部错误' });
+        console.error('收藏操作失败响应发送');
+    }
+});
+
 // 获取文物评论列表
 router.get('/comments/:id', async (req, res) => {
     const id = req.params.id;
@@ -172,7 +222,7 @@ router.post('/comments/like/:comment_id', (req, res) => {
     });
 });
 
-// ✅ 获取文物详情（含多图和视频）
+// 获取文物详情（含多图和视频）
 router.get('/detail/:id', async (req, res) => {
     const id = req.params.id;
     const sql = `
@@ -216,37 +266,62 @@ router.get('/comment_status/:user_id', (req, res) => {
     });
 });
 
-// 获取文物点赞和收藏状态
+// 获取文物点赞状态
 router.get('/status/:id', async (req, res) => {
-    console.log('收到 status 路由请求:', req.url, req.params, req.query);
-    const id = Number(req.params.id);
+    console.log('[status]收到 status 路由请求:', req.url, req.params, req.query);
+    const relicId = req.params.id;
     const userId = Number(req.query.user_id);
 
-    const sql = `
-    SELECT 
-      c.likes_count as like_count,
-      (SELECT COUNT(*) FROM user_favorite WHERE relic_id = ? AND user_id = ? AND favorite_type = 1) as favorite_count,
-      (SELECT COUNT(*) FROM relic_like WHERE relic_id = ? AND user_id = ?) as is_liked,
-      (SELECT COUNT(*) FROM user_favorite WHERE relic_id = ? AND user_id = ? AND favorite_type = 1) as is_favorited
-    FROM cultural_relic c
-    WHERE c.relic_id = ?
-  `;
-
     try {
-        const results = await mysqlService.query(sql, [id, userId, id, userId, id, userId, id]);
-        if (!results || results.length === 0) {
-            console.log('status接口SQL结果为空:', results);
+        // 获取文物的点赞数
+        const likeCountSql = 'SELECT likes_count FROM cultural_relic WHERE relic_id = ?';
+        const likeCountResult = await mysqlService.query(likeCountSql, [relicId]);
+
+        if (!likeCountResult || likeCountResult.length === 0) {
+            console.log('[status]未找到文物:', relicId);
             return res.status(404).json({ error: '文物不存在' });
         }
-        const result = results[0];
-        console.log('status接口SQL结果:', results);
-        console.log('接口返回like_count:', result.like_count);
-        res.json({
-            like_count: result.like_count,
-            favorite_count: result.favorite_count,
-            is_liked: result.is_liked > 0,
-            is_favorited: result.is_favorited > 0
-        });
+
+        // 获取用户是否点赞
+        const isLikedSql = 'SELECT COUNT(*) as count FROM relic_like WHERE relic_id = ? AND user_id = ?';
+        const isLikedResult = await mysqlService.query(isLikedSql, [relicId, userId]);
+
+        const response = {
+            like_count: likeCountResult[0].likes_count,
+            is_liked: isLikedResult[0].count > 0
+        };
+
+        console.log('[status]返回状态:', response);
+        res.json(response);
+    } catch (err) {
+        console.error('[status]查询状态失败:', err);
+        res.status(500).json({ error: '数据库查询失败' });
+    }
+});
+
+// 获取文物收藏状态
+router.get('/fstatus/:id', async (req, res) => {
+    console.log('收到 status 路由请求:', req.url, req.params, req.query);
+    const relicId = req.params.id;
+    const userId = Number(req.query.user_id);
+    try {
+        // 获取文物的收藏数
+        const favoriteCountSql = 'SELECT COUNT(*) as favorite_count FROM user_favorite WHERE relic_id = ?';
+        const favoriteCountResult = await mysqlService.query(favoriteCountSql, [relicId]);
+
+        if (!favoriteCountResult || favoriteCountResult.length === 0) {
+            console.log('未找到文物:', relicId);
+            return res.status(404).json({ error: '文物不存在' });
+        }
+        // 获取用户是否点赞
+        const isFavoritedSql = 'SELECT COUNT(*) as count FROM user_favorite WHERE relic_id = ? AND user_id = ?';
+        const isFavoritedResult = await mysqlService.query(isFavoritedSql, [relicId, userId]);
+        const response = {
+            favorite_count: favoriteCountResult[0].favorite_count,
+            is_favorited: isFavoritedResult[0].count > 0
+        };
+        console.log('返回状态:', response);
+        res.json(response);
     } catch (err) {
         console.error('查询状态失败:', err);
         res.status(500).json({ error: '数据库查询失败' });
@@ -337,7 +412,6 @@ router.get('/history/:user_id', async (req, res) => {
         res.status(500).json({ error: '数据库查询失败' });
     }
 });
-
 
 // 上传图片
 router.post('/upload_images', async (req, res) => {

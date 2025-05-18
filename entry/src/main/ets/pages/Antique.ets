@@ -72,11 +72,11 @@ class AntiqueDataSource implements IDataSource {
 @Entry
 @Component
 export default struct Antique {
-  @State searchText: string = ''
+  @Prop searchText: string = ''
   @State selectedCategory: string = '全部'
   @State refreshKey: number = 0  // 新增强制刷新Key
   @State antiqueList: Array<AntiqueItem> = []
-  @State filteredList: Array<AntiqueItem> = []
+  @Prop filteredList: Array<AntiqueItem> = []
   @State isSearching: boolean = false
   @State private dataSource: AntiqueDataSource = new AntiqueDataSource([])
 
@@ -325,29 +325,48 @@ export default struct Antique {
     Column() {
       // 搜索框区域
       Row() {
+        // 图像识别按钮
         Image($r('app.media.find_same'))
           .width(20)
           .height(20)
           .margin({ left: 12, right: 8 })
           .onClick(() => this.handleImageSearch())
 
+        // 搜索图标
         Image($r('app.media.search_icon'))
           .width(20)
           .height(20)
           .margin({ right: 8 })
 
-        TextInput({
-          placeholder: '搜索文物名称',
-          text: this.searchText
-        })
-          .onChange((value: string) => {
-            this.searchText = value
-            this.updateFilteredData()
+        // 输入框 + 搜索按钮组合
+        Row() {
+          TextInput({
+            placeholder: '搜索文物名称',
+            text: this.searchText
           })
-          .backgroundColor('#FFFFFF')
-          .borderRadius(8)
-          .padding(8)
-          .width('100%')
+            .onChange((value: string) => {
+              this.searchText = value
+            })
+            .type(InputType.Normal)
+            .backgroundColor('#FFFFFF')
+            .borderRadius(8)
+            .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+            .layoutWeight(1)
+
+          Button('搜索')
+            .onClick(() => this.updateFilteredData())
+            .fontSize(14)
+            .margin({ left: 6, right: 0 })
+            .backgroundColor('#DAA520')
+            .fontColor('#FFFFFF')
+            .height(36)
+            .borderRadius(6)
+        }
+        .backgroundColor('#FFFFFF')
+        .borderRadius(8)
+        .padding({ left: 6, right: 6 })
+        .width('70%')
+        .height(40)
       }
       .height(40)
       .margin({ top: 16, left: 16, right: 16, bottom: 10 })
