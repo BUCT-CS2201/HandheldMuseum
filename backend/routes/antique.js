@@ -157,22 +157,60 @@ router.get('/comments/:id', async (req, res) => {
             rc.parent_id,
             rc.status,
             rc.is_deleted,
-            u.name AS user_name
+            u.name AS user_name,
+            COALESCE(
+              CONCAT(
+                '[',
+                GROUP_CONCAT(
+                  JSON_OBJECT(
+                    'image_id', img.image_id,
+                    'suffix', img.image_suffix,
+                    'status', img.status
+                  )
+                ),
+                ']'
+              ),
+              '[]'
+            ) as images
         FROM
             relic_comment rc
         JOIN
             user u ON rc.user_id = u.user_id
+        LEFT JOIN
+            user_image img ON rc.comment_id = img.comment_id
         WHERE
             rc.relic_id = ? AND rc.is_deleted = 0 AND rc.status = 1
+        GROUP BY
+            rc.comment_id
         ORDER BY
             rc.create_time DESC
     `;
     const start = Date.now(); // 记录开始时间，用于计算SQL执行耗时
     try {
         const results = await mysqlService.query(sql, [id]); // 执行SQL查询，获取评论数据
+        const comments =  results.map(item => {
+            let images = [] ;
+            if( item.images && item.images !== '[]' ) {
+                // 移除可能的空值
+                const cleanJson = item.images.replace(/null,?/g, '').replace(/,\]/g, ']');
+                try {
+                    images = JSON.parse(cleanJson);
+                    // 只保留状态为1的图片
+                    images = images.filter(img => img && img.status === 1);
+                    images = images.map(img => `${img.image_id}.${img.suffix}`);
+                } catch (e) {
+                    console.error('解析图片JSON失败:', item.comment_id);
+                    images = []; // 如果解析失败，设置为空数组
+                }
+            }
+            return {
+                ...item,
+                images: images
+            }
+        })
         console.log('SQL执行耗时:', Date.now() - start, 'ms'); // 打印SQL查询耗时
-        console.log('评论接口返回结果:', results); // 打印查询到的评论结果，便于调试
-        res.json(results); // 将评论数据以JSON格式返回给前端
+        console.log('评论接口返回结果:', comments); // 打印查询到的评论结果，便于调试
+        res.json(comments); // 将评论数据以JSON格式返回给前端
     } catch (err) {
         console.error('查询评论失败:', err); // 打印错误信息
         res.status(500).json({ error: '数据库查询失败' }); // 返回500错误和错误信息给前端

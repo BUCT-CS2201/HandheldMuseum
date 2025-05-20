@@ -35,6 +35,13 @@ export default struct Museum {
             } else if (typeof data.result === 'object' && data.result !== null) {
               result = [data.result as notice];
             }
+            // 在前端处理每个公告的 notice_content
+            result.forEach(notice => {
+              // 按段落分割 notice_content
+              notice.content = notice.notice_content.split('\r\n'); // 按换行符分割
+              notice.content.push(" ") ;
+              notice.content.push(" ") ;
+            });
             this.notices = result;
             this.message = '公告加载成功';
           } catch (e) {

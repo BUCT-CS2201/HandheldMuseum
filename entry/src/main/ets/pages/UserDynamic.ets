@@ -9,7 +9,7 @@ import prompt from '@ohos.prompt';
 
 // 本地图片存储配置
 const LOCAL_IMAGE_BASE = 'file:///data/storage/el2/base/cache/uploads/';
-const BACKEND_IMAGE_BASE = 'http://localhost:3000/uploads/DynamicUploads/';
+const BACKEND_IMAGE_BASE = 'http://10.4.52.124:3000/uploads/DynamicUploads/';
 
 // 在文件开头的import语句后添加接口定义
 interface LikeResponse {
@@ -88,7 +88,7 @@ struct DynamicItemComponent {
       console.log('开始加载评论，动态ID:', this.item.id);
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
-        `http://localhost:3000/api/dynamic/comments/${this.item.id}`,
+        `http://10.4.52.124:3000/api/dynamic/comments/${this.item.id}`,
         {
           method: http.RequestMethod.GET,
           header: {
@@ -191,7 +191,7 @@ struct DynamicItemComponent {
 
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
-        "http://localhost:3000/api/dynamic/comment",
+        "http://10.4.52.124:3000/api/dynamic/comment",
         {
           method: http.RequestMethod.POST,
           header: {
@@ -238,7 +238,7 @@ struct DynamicItemComponent {
     try {
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
-        `http://localhost:3000/api/dynamic/comment/${commentId}`,
+        `http://10.4.52.124:3000/api/dynamic/comment/${commentId}`,
         {
           method: http.RequestMethod.DELETE,
           header: {
@@ -690,7 +690,7 @@ struct UserDynamic {
       console.log('开始加载动态数据');
 
       let response = await httpRequest.request(
-        "http://localhost:3000/api/dynamic/list",
+        "http://10.4.52.124:3000/api/dynamic/list",
         {
           method: http.RequestMethod.GET,
           header: {
@@ -788,7 +788,7 @@ struct UserDynamic {
       });
 
       let response = await httpRequest.request(
-        "http://localhost:3000/api/dynamic/like",
+        "http://10.4.52.124:3000/api/dynamic/like",
         {
           method: http.RequestMethod.POST,
           header: {

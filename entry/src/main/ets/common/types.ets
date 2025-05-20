@@ -8,4 +8,5 @@ export interface notice {
   notice_content: string
   create_time: Date
   update_time: Date
+  content : Array< string >
 }

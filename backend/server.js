@@ -13,8 +13,8 @@ app.use(cors())
 app.use(express.json())
 
 // 关键配置：暴露 uploads 目录为静态资源
-console.log('上传文件目录:', path.join(__dirname, 'uploads/DynamicUploads')); // 添加这行
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+console.log('上传文件目录:', path.join(__dirname, 'comment_image')); // 添加这行
+app.use('/comment_image', express.static(path.join(__dirname, 'comment_image')));
 // 挂载文物相关API
 app.use('/api/antique', antiqueRoutes)
 app.use('/api/museum', museumRoutes)

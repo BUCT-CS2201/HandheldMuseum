@@ -49,7 +49,7 @@ struct UserProfile {
 
       let httpRequest = http.createHttp();
       httpRequest.request(
-        `http://localhost:3000/api/user/info/${userId}`,
+        `http://10.4.52.124:3000/api/user/info/${userId}`,
         {
           method: http.RequestMethod.GET,
         },
@@ -289,7 +289,7 @@ struct UserProfile {
     try {
       let httpRequest = http.createHttp();
       httpRequest.request(
-        `http://localhost:3000/api/user/info/${this.userInfo.user_id}`,
+        `http://10.4.52.124:3000/api/user/info/${this.userInfo.user_id}`,
         {
           method: http.RequestMethod.PUT,
           header: {

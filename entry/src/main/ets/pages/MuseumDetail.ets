@@ -1,6 +1,9 @@
 import router from '@ohos.router';
 import http from '@ohos.net.http';
 import { BusinessError } from '@ohos.base';
+import common from '@ohos.app.ability.common';
+import pasteboard from '@ohos.pasteboard';
+import prompt from '@ohos.prompt';
 
 interface MuseumDetailInfo {
   museum_id: number;
@@ -76,6 +79,13 @@ class RelicDataSource implements IDataSource {
   }
 }
 
+interface Mywant {
+  "action": string;
+  "entities": string[];
+  "uri": string;
+  "type": string;
+}
+
 @Entry
 @Component
 struct MuseumDetail {
@@ -100,7 +110,7 @@ struct MuseumDetail {
   fetchMuseumDetail(museumId: number) {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/museum/detail/${museumId}`,
+      `http://10.4.100.140:3000/api/museum/detail/${museumId}`,
       {
         method: http.RequestMethod.GET,
       },
@@ -132,7 +142,7 @@ struct MuseumDetail {
   fetchMuseumRelics(museumId: number) {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      `http://localhost:3000/api/museum/relics/${museumId}`,
+      `http://10.4.100.140:3000/api/museum/relics/${museumId}`,
       {
         method: http.RequestMethod.GET,
       },
@@ -155,6 +165,38 @@ struct MuseumDetail {
         httpRequest.destroy();
       }
     );
+  }
+
+  showToast(message: string) {
+    let toastMessage = message;
+    setTimeout(() => {
+      prompt.showToast({ message: toastMessage });
+    }, 0);
+  }
+
+  async implicitStartAbility( url : string ) {
+    // 获取系统剪贴板对象
+    let text = url ;
+    // 创建一条纯文本类型的剪贴板内容对象
+    let pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+    // 将数据写入系统剪贴板
+    let systemPasteboard = pasteboard.getSystemPasteboard();
+    await systemPasteboard.setData(pasteData);
+    this.showToast('已复制到粘贴板');
+
+    try {
+      let want: Mywant = {
+        "action": "ohos.want.action.viewData",
+        "entities": [ "entity.system.browsable" ],
+        "uri": url,
+        "type": "text/plain"
+      }
+      let context = getContext(this) as common.UIAbilityContext;
+      await context.startAbility(want)
+      console.info(`explicit start ability succeed`)
+    } catch (error) {
+      console.info(`explicit start ability failed with ${error.code}`)
+    }
   }
 
   build() {
@@ -226,6 +268,8 @@ struct MuseumDetail {
                     .fontColor('#4A90E2')
                     .onClick(() => {
                       // 处理网址点击
+                      if( !this.museumInfo ) return ;
+                      this.implicitStartAbility( this.museumInfo.website_url ) ;
                     })
                 }
                 .width('100%')
@@ -258,6 +302,8 @@ struct MuseumDetail {
                     .fontColor('#4A90E2')
                     .onClick(() => {
                       // 处理预约链接点击
+                      if( !this.museumInfo ) return ;
+                      this.implicitStartAbility( this.museumInfo.booking_url) ;
                     })
                 }
                 .width('100%')
@@ -286,9 +332,9 @@ struct MuseumDetail {
                         Image(item.relic_image)
                           .width(120)
                           .height(120)
-                          .objectFit(ImageFit.Cover)
+                          .objectFit(ImageFit.Contain)
                           .borderRadius(8)
-                          .alt($r('app.media.background'))
+                          .alt($r('app.media.image_error'))
                           .onError(() => {
                             console.error('图片加载失败:', item.relic_image);
                           })

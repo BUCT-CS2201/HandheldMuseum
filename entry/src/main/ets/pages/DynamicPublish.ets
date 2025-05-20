@@ -226,7 +226,7 @@ struct DynamicPublish {
 
       // 1. 提交动态内容（使用与评论相同的接口）
       const httpRequest = http.createHttp();
-      const url = 'http://localhost:3000/api/antique/upload_comments/0'; // relicId 设为 0 表示动态
+      const url = 'http://10.4.52.124:3000/api/antique/upload_comments/0'; // relicId 设为 0 表示动态
       const response: FetchResult = await httpRequest.request(url, {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -270,7 +270,7 @@ struct DynamicPublish {
     }
 
     // 使用Python Flask接口上传图片
-    const uploadUrl: string = 'http://localhost:5000/upload_image';
+    const uploadUrl: string = 'http://10.4.52.124:5000/upload_image';
     const httpRequest: http.HttpRequest = http.createHttp();
 
     console.info('准备上传图片，selectedImages:', JSON.stringify(this.selectedImages));

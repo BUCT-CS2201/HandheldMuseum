@@ -21,7 +21,7 @@ struct MuseumInfo {
   fetchMuseumData() {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      'http://localhost:3000/api/museum/info',
+      'http://10.4.100.140:3000/api/museum/info',
       {
         method: http.RequestMethod.GET,
       },
@@ -79,7 +79,7 @@ struct MuseumInfo {
                 .height(120)
                 .objectFit(ImageFit.Cover)
                 .borderRadius(8)
-                .alt($r('app.media.background'))
+                .alt($r('app.media.image_error'))
                 .onError(() => {
                   console.error('图片加载失败:', item.museum_image);
                 })

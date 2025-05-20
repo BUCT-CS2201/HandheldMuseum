@@ -1,11 +1,16 @@
 import http from '@ohos.net.http';
 import router from '@ohos.router';
 import prompt from '@ohos.prompt';
+import common from '@ohos.app.ability.common';
 import { UserStore } from '../common/UserStore';
 import preferences from '@ohos.data.preferences';
 import picker from '@ohos.file.picker'
 import fs from '@ohos.file.fs'
 import { BusinessError } from '@kit.BasicServicesKit';
+import { ImageItem } from '../common/types/DynamicTypes'
+import { matrix4 } from '@kit.ArkUI';
+
+const BACKEND_IMAGE_BASE = 'http://10.4.100.140:3000/comment_image/';
 
 // 路由参数类型
 interface RouterParams {
@@ -59,14 +64,7 @@ interface CommentItem {
   parent_id?: number;
   status: number;
   is_deleted: number;
-}
-
-interface CommentID {
-  comment_id: number;
-}
-
-interface CommentResult {
-  result:CommentID;
+  images: Array<string>;
 }
 
 // 定义 FetchResult 接口
@@ -95,13 +93,6 @@ class CommentTreeItem {
     this.comment = comment;
     this.replies = replies;
   }
-}
-
-interface GeneratedTypeLiteralInterface_1 {
-  name: string;
-  contentType: string;
-  filePath: string;
-  remoteFileName: string;
 }
 
 interface GeneratedTypeLiteralInterface_2 {
@@ -137,6 +128,7 @@ struct AntiqueDetail {
   @State isFavorited: boolean = false;
   @State selectedImages: string[] = []; // 用于存储选择的图片URI
   private userPreferences: preferences.Preferences | null = null;
+  @State matrix: matrix4.Matrix4Transit = matrix4.identity().copy();
 
   // 每次页面显示时，自动初始化和加载所有页面需要的数据和状态，确保用户看到的是最新的内容。
   aboutToAppear() {
@@ -184,7 +176,7 @@ struct AntiqueDetail {
 
   fetchAntiqueDetail(id: number): void {
     const httpRequest = http.createHttp();
-    const url = `http://192.168.1.103:3000/api/antique/detail/${id}`;
+    const url = `http://10.4.100.140:3000/api/antique/detail/${id}`;
     console.log('请求的URL:', url);
 
     httpRequest.request(
@@ -267,7 +259,7 @@ struct AntiqueDetail {
   fetchComments(id: number): void {
     console.log('fetchComments被调用，id:', id);
     const httpRequest = http.createHttp();
-    const url = `http://192.168.1.103:3000/api/antique/comments/${id}`;
+    const url = `http://10.4.100.140:3000/api/antique/comments/${id}`;
     httpRequest.request(
       url,
       { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
@@ -350,7 +342,7 @@ struct AntiqueDetail {
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
     if (relicId > 0 && this.commentContent) {
       const httpRequest2 = http.createHttp();
-      const url = `http://192.168.1.103:3000/api/antique/upload_comments/${relicId}`; // 确保包含 relicId
+      const url = `http://localhost:3000/api/antique/upload_comments/${relicId}`; // 确保包含 relicId
       const response: FetchResult = await httpRequest2.request(url, {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -385,7 +377,7 @@ struct AntiqueDetail {
       return; // 没有选择图片
     }
 
-    const uploadUrl: string = 'http://192.168.1.103:5000/upload_image'; // 假设这是上传图片的接口
+    const uploadUrl: string = 'http://localhost:5000/upload_image'; // 假设这是上传图片的接口
     const httpRequest: http.HttpRequest = http.createHttp();
 
     this.selectedImages.map( async (imageUri) => {
@@ -426,7 +418,7 @@ struct AntiqueDetail {
       return; // 退出函数
     }
     const httpRequest = http.createHttp();
-    const url = `http://192.168.1.103:3000/api/antique/comments/like/${comment_id}`;
+    const url = `http://localhost:3000/api/antique/comments/like/${comment_id}`;
     httpRequest.request(
       url,
       {
@@ -480,7 +472,7 @@ struct AntiqueDetail {
       console.info(`[like]开始第${retryCount + 1}次点赞请求，用户ID: ${userId}, 文物ID: ${this.antique.relic_id}`);
 
       // 使用更可靠的服务器地址 (根据浏览量功能确认可达)
-      const serverUrl = 'http://192.168.1.103:3000/api/antique/like/' + this.antique.relic_id;
+      const serverUrl = 'http://localhost:3000/api/antique/like/' + this.antique.relic_id;
       console.info('[like]请求URL:', serverUrl);
 
       httpRequest.request(
@@ -599,7 +591,7 @@ struct AntiqueDetail {
       console.info(`[favorite]开始第${retryCount + 1}次收藏请求，用户ID: ${userId}, 文物ID: ${this.antique.relic_id}`);
 
       // 使用更可靠的服务器地址 (根据浏览量功能确认可达)
-      const serverUrl = 'http://192.168.1.103:3000/api/antique/favorite/' + this.antique.relic_id;
+      const serverUrl = 'http://localhost:3000/api/antique/favorite/' + this.antique.relic_id;
       console.info('[favorite]请求URL:', serverUrl);
 
       httpRequest.request(
@@ -694,7 +686,7 @@ struct AntiqueDetail {
       // 使用this.antique.relic_id 构建URL，确保和likeAntique使用一致的ID
       // userId即使为0也会发送给后端
       httpRequest.request(
-        `http://192.168.1.103:3000/api/antique/status/${this.antique.relic_id}?user_id=${userId}`,
+        `http://localhost:3000/api/antique/status/${this.antique.relic_id}?user_id=${userId}`,
         { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
         (err: Error | undefined, data: FetchResult) => {
           if (err) {
@@ -748,7 +740,7 @@ struct AntiqueDetail {
       // 使用this.antique.relic_id 构建URL，确保和likeAntique使用一致的ID
       // userId即使为0也会发送给后端
       httpRequest.request(
-        `http://192.168.1.103:3000/api/antique/fstatus/${this.antique.relic_id}?user_id=${userId}`,
+        `http://localhost:3000/api/antique/fstatus/${this.antique.relic_id}?user_id=${userId}`,
         { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
         (err: Error | undefined, data: FetchResult) => {
           if (err) {
@@ -1019,6 +1011,24 @@ struct AntiqueDetail {
                               .fontColor('#999')
                               .margin({ left: 8 })
                           }
+                          //图片展示
+                          Grid() {
+                            ForEach( item.comment.images, (img: string) => {
+                              GridItem() {
+                                Image( BACKEND_IMAGE_BASE + img )
+                                  .width('100%')
+                                  .aspectRatio(1)
+                                  .objectFit(ImageFit.Cover)
+                                  .borderRadius(12)
+                                  .transform(this.matrix)
+                              }
+                            })
+                          }
+                          .columnsTemplate('1fr 1fr 1fr')
+                          .rowsGap(8)
+                          .columnsGap(8)
+                          .margin({ bottom: 16 })
+                          //内容展示
                           Text(item.comment.content)
                             .fontSize(14)
                             .fontColor('#222')

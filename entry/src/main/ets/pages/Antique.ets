@@ -96,7 +96,7 @@ export default struct Antique {
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://192.168.1.103:3000/api/antique/list?ts=${Date.now()}`,
+      `http://10.4.100.140:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
@@ -153,7 +153,7 @@ export default struct Antique {
     item.like_count += 1
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://192.168.1.103:3000/api/antique/like/${item.id}`,
+      `http://10.4.90.212:3000/api/antique/like/${item.id}`,
       { method: http.RequestMethod.POST },
       (err, data) => {
         let response: LikeResponse | null = null
@@ -202,7 +202,7 @@ export default struct Antique {
 
       let httpRequest = http.createHttp();
       httpRequest.request(
-        `http://192.168.1.103:3000/api/antique/views/${item.id}`,
+        `http://localhost:3000/api/antique/views/${item.id}`,
         {
           method: http.RequestMethod.POST,
           header: { 'Content-Type': 'application/json' },
@@ -260,7 +260,7 @@ export default struct Antique {
         fs.closeSync(fileTemp);
         console.info('开始上传图片，图片URI:', imageUri_1);
 
-        const uploadUrl: string = 'http://192.168.1.103:5000/search_similar';
+        const uploadUrl: string = 'http://10.4.90.212:5000/search_similar';
         const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
           method: http.RequestMethod.POST,
           header: {
