@@ -32,7 +32,7 @@ struct SearchResult {
     try {
       let httpRequest = http.createHttp();
       const response = await httpRequest.request(
-        'http://10.4.52.124:3000/api/antique/list',
+        'http://10.4.37.15:3000/api/antique/list',
         { method: http.RequestMethod.GET }
       );
 

@@ -5,7 +5,7 @@ import type { BusinessError } from '@ohos.base';
 import promptAction from '@ohos.promptAction';
 
 // 服务器配置
-const SERVER_URL = 'http://10.4.52.124:3000';
+const SERVER_URL = 'http://10.4.59.157:3000';
 
 interface RegisterData {
   user_id: number;

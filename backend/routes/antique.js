@@ -146,7 +146,8 @@ router.post('/favorite/:id', async (req, res) => {
 // 获取文物评论列表
 router.get('/comments/:id', async (req, res) => {
     const id = req.params.id;
-    console.log('收到评论请求，relic_id:', id);
+    const userId = req.query.user_id ? Number(req.query.user_id) : 0;
+    console.log('[comments]收到评论请求，relic_id:', id);
     const sql = `
         SELECT
             rc.comment_id,
@@ -158,6 +159,7 @@ router.get('/comments/:id', async (req, res) => {
             rc.status,
             rc.is_deleted,
             u.name AS user_name,
+            (SELECT COUNT(*) FROM comment_like WHERE comment_id = rc.comment_id AND user_id = ?) as is_liked,
             COALESCE(
               CONCAT(
                 '[',
@@ -187,7 +189,7 @@ router.get('/comments/:id', async (req, res) => {
     `;
     const start = Date.now(); // 记录开始时间，用于计算SQL执行耗时
     try {
-        const results = await mysqlService.query(sql, [id]); // 执行SQL查询，获取评论数据
+        const results = await mysqlService.query(sql, [userId, id]); // userId 作为第一个参数
         const comments =  results.map(item => {
             let images = [] ;
             if( item.images && item.images !== '[]' ) {
@@ -205,12 +207,13 @@ router.get('/comments/:id', async (req, res) => {
             }
             return {
                 ...item,
+                is_liked: item.is_liked > 0, // 转为布尔值
                 images: images
             }
         })
         console.log('SQL执行耗时:', Date.now() - start, 'ms'); // 打印SQL查询耗时
         console.log('评论接口返回结果:', comments); // 打印查询到的评论结果，便于调试
-        res.json(comments); // 将评论数据以JSON格式返回给前端
+        res.json(comments); // 只发送一次响应
     } catch (err) {
         console.error('查询评论失败:', err); // 打印错误信息
         res.status(500).json({ error: '数据库查询失败' }); // 返回500错误和错误信息给前端
@@ -226,38 +229,49 @@ router.post('/upload_comments/:id', async (req, res) => {
         return res.status(400).json({ error: '用户未登录或user_id无效' });
     }
 
-    const sql = 'INSERT INTO relic_comment (relic_id, user_id, content, parent_id) VALUES (?, ?, ?, ?)';
-
+    // status 默认 0，reply_count 不用管，审核通过后再统计
+    const sql = 'INSERT INTO relic_comment (relic_id, user_id, content, parent_id, status) VALUES (?, ?, ?, ?, 0)';
     const results = await mysqlService.query(sql, [relicId, user_id, content, parent_id]);
     res.json({ comment_id: results.insertId });
 });
 
-// 点赞评论
-router.post('/comments/like/:comment_id', (req, res) => {
+// 点赞评论（幂等，支持点赞/取消点赞）
+router.post('/comments/like/:comment_id', async (req, res) => {
     const comment_id = req.params.comment_id;
     const { user_id } = req.body;
-    const sql1 = 'INSERT INTO comment_like (comment_id, user_id) VALUES (?,?)';
-    mysqlService.query(sql1, [comment_id, user_id], (err1, result1) => {
-        if (err1) {
-            console.error('点赞评论失败:', err1);
-            return res.status(500).json({ error: '数据库插入失败' });
+    try {
+        // 先检查是否已经点赞
+        const checkSql = 'SELECT COUNT(*) as count FROM comment_like WHERE comment_id = ? AND user_id = ?';
+        const results = await mysqlService.query(checkSql, [comment_id, user_id]);
+        const hasLiked = results[0].count > 0;
+
+        if (hasLiked) {
+            // 取消点赞
+            const deleteSql = 'DELETE FROM comment_like WHERE comment_id = ? AND user_id = ?';
+            await mysqlService.query(deleteSql, [comment_id, user_id]);
+            const updateSql = 'UPDATE relic_comment SET like_count = like_count - 1 WHERE comment_id = ?';
+            await mysqlService.query(updateSql, [comment_id]);
+        } else {
+            // 添加点赞
+            const insertSql = 'INSERT INTO comment_like (comment_id, user_id) VALUES (?, ?)';
+            await mysqlService.query(insertSql, [comment_id, user_id]);
+            const updateSql = 'UPDATE relic_comment SET like_count = like_count + 1 WHERE comment_id = ?';
+            await mysqlService.query(updateSql, [comment_id]);
         }
-        const sql2 = 'UPDATE relic_comment SET like_count = like_count + 1 WHERE comment_id = ?';
-        mysqlService.query(sql2, [comment_id], (err2, result2) => {
-            if (err2) {
-                console.error('更新评论点赞数失败:', err2);
-                return res.status(500).json({ error: '数据库更新失败' });
-            }
-            const sql3 = 'SELECT like_count FROM relic_comment WHERE comment_id = ?';
-            mysqlService.query(sql3, [comment_id], (err3, results3) => {
-                if (err3) {
-                    console.error('查询评论点赞数失败:', err3);
-                    return res.status(500).json({ error: '数据库查询失败' });
-                }
-                res.json({ like_count: results3[0].like_count });
-            });
+
+        // 查询最新点赞数
+        const getCountSql = 'SELECT like_count FROM relic_comment WHERE comment_id = ?';
+        const countResults = await mysqlService.query(getCountSql, [comment_id]);
+
+        // 现在 newIsLiked 在这里是已定义的
+        res.json({
+            like_count: countResults[0].like_count
         });
-    });
+
+    } catch (err) {
+        console.error('评论点赞操作失败:', err);
+        res.status(500).json({ error: '服务器内部错误' });
+    }
 });
 
 // 获取文物详情（含多图和视频）
@@ -304,33 +318,69 @@ router.get('/comment_status/:user_id', (req, res) => {
     });
 });
 
+// 获取评论点赞状态
+router.get('/cstatus/:id', async (req, res) => {
+    console.log('[status]收到 status 路由请求:', req.url, req.params, req.query);
+    const id = Number(req.params.id);
+    const userId = Number(req.query.user_id);
+
+    const sql = `
+    SELECT
+      c.like_count as like_count,
+      (SELECT COUNT(*) FROM comment_like WHERE comment_id = ? AND user_id = ?) as is_liked
+    FROM relic_comment c
+    WHERE c.comment_id = ?
+  `;
+
+    try {
+        const results = await mysqlService.query(sql, [id, userId, id]);
+        if (!results || results.length === 0) {
+            console.log('[status]status接口SQL结果为空:', results);
+            return res.status(404).json({ error: '评论不存在' });
+        }
+        const result = results[0];
+        console.log('[status]status接口SQL结果:', results);
+        console.log('[status]接口返回like_count:', result.like_count);
+        // 只返回点赞相关的状态
+        res.json({
+            like_count: result.like_count,
+            is_liked: result.is_liked > 0
+        });
+    } catch (err) {
+        console.error('[status]查询状态失败:', err);
+        res.status(500).json({ error: '数据库查询失败' });
+    }
+});
+
 // 获取文物点赞状态
 router.get('/status/:id', async (req, res) => {
     console.log('[status]收到 status 路由请求:', req.url, req.params, req.query);
-    const relicId = req.params.id;
+    const id = Number(req.params.id);
     const userId = Number(req.query.user_id);
 
-    try {
-        // 获取文物的点赞数
-        const likeCountSql = 'SELECT likes_count FROM cultural_relic WHERE relic_id = ?';
-        const likeCountResult = await mysqlService.query(likeCountSql, [relicId]);
+    // 获取文物点赞状态的 SQL
+    const sql = `
+    SELECT
+      c.likes_count as like_count,
+      (SELECT COUNT(*) FROM relic_like WHERE relic_id = ? AND user_id = ?) as is_liked
+    FROM cultural_relic c
+    WHERE c.relic_id = ?
+  `;
 
-        if (!likeCountResult || likeCountResult.length === 0) {
-            console.log('[status]未找到文物:', relicId);
+    try {
+        const results = await mysqlService.query(sql, [id, userId, id]);
+        if (!results || results.length === 0) {
+            console.log('[status]status接口SQL结果为空:', results);
             return res.status(404).json({ error: '文物不存在' });
         }
-
-        // 获取用户是否点赞
-        const isLikedSql = 'SELECT COUNT(*) as count FROM relic_like WHERE relic_id = ? AND user_id = ?';
-        const isLikedResult = await mysqlService.query(isLikedSql, [relicId, userId]);
-
-        const response = {
-            like_count: likeCountResult[0].likes_count,
-            is_liked: isLikedResult[0].count > 0
-        };
-
-        console.log('[status]返回状态:', response);
-        res.json(response);
+        const result = results[0];
+        console.log('[status]status接口SQL结果:', results);
+        console.log('[status]接口返回like_count:', result.like_count);
+        // 只返回点赞相关的状态
+        res.json({
+            like_count: result.like_count,
+            is_liked: result.is_liked > 0
+        });
     } catch (err) {
         console.error('[status]查询状态失败:', err);
         res.status(500).json({ error: '数据库查询失败' });

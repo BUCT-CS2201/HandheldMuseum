@@ -4,6 +4,9 @@ import {BusinessError} from '@kit.BasicServicesKit'
 import picker from '@ohos.file.picker'
 import fs from '@ohos.file.fs'
 import preferences from '@ohos.data.preferences';
+import prompt from '@ohos.prompt';
+import emitter from '@ohos.events.emitter';
+
 
 interface AntiqueItem {
   id: number;
@@ -25,8 +28,14 @@ interface SearchResponse {
   data?: ResponseId;
 }
 
-interface LikeResponse {
-  like_count: number;
+// Interface for the overall response structure from /api/antique/status/:id
+interface StatusApiResponse {
+  result: string | StatusResultData; // result can be a string or the parsed data object
+}
+
+// Interface for the data inside the 'result' property (as returned by backend)
+interface StatusResultData {
+  relic_id: number;
 }
 
 // 添加DataSource类
@@ -72,11 +81,11 @@ class AntiqueDataSource implements IDataSource {
 @Entry
 @Component
 export default struct Antique {
-  @Prop searchText: string = ''
+  @State searchText: string = ''
   @State selectedCategory: string = '全部'
   @State refreshKey: number = 0  // 新增强制刷新Key
   @State antiqueList: Array<AntiqueItem> = []
-  @Prop filteredList: Array<AntiqueItem> = []
+  @State filteredList: Array<AntiqueItem> = []
   @State isSearching: boolean = false
   @State private dataSource: AntiqueDataSource = new AntiqueDataSource([])
 
@@ -88,23 +97,32 @@ export default struct Antique {
     '明': [ '明朝'],
     '清': [ '清朝']
   }
+  private likeChangeSubscription = null;
 
   aboutToAppear(): void {
     this.fetchData()
+    emitter.on('relicLikeChanged', () => {
+      this.fetchData();
+    });
   }
 
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://10.4.100.140:3000/api/antique/list?ts=${Date.now()}`,
+      `http://10.4.122.66:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
           try {
-            const newList: AntiqueItem[] = JSON.parse(data.result)
-            console.info('[Antique] 获取到文物数据，数量:', newList.length)
-            this.antiqueList = newList
-            this.updateFilteredData()
+            const newList: AntiqueItem[] = JSON.parse(data.result);
+            // 确保解析结果是一个数组
+            if (Array.isArray(newList)) {
+              console.info('[Antique] 获取到文物数据，数量:', newList.length);
+              this.antiqueList = newList;
+              this.updateFilteredData();
+            } else {
+              console.error('[Antique] 解析数据失败: 返回的不是数组');
+            }
           } catch (e) {
             console.error('[Antique] 解析数据失败:', e)
           }
@@ -146,45 +164,12 @@ export default struct Antique {
     this.dataSource.notifyDataChange()
     this.refreshKey += 1  // 在数据更新后增加refreshKey
   }
-
-  // 添加点赞处理函数
-  private handleLike(item: AntiqueItem): void {
-    // 1. 乐观更新：本地先+1，UI立即变化
-    item.like_count += 1
-    let httpRequest = http.createHttp()
-    httpRequest.request(
-      `http://10.4.90.212:3000/api/antique/like/${item.id}`,
-      { method: http.RequestMethod.POST },
-      (err, data) => {
-        let response: LikeResponse | null = null
-        if (!err && data) {
-          if (typeof data.result === 'string') {
-            // 新增：打印原始内容
-            console.log('点赞接口返回字符串:', data.result)
-            // 新增：判断是否为合法JSON
-            try {
-              const trimmed = data.result.trim()
-              if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                response = JSON.parse(data.result) as LikeResponse
-              } else {
-                console.error('点赞接口返回内容不是JSON:', data.result)
-              }
-            } catch (e) {
-              console.error('点赞接口返回内容不是合法JSON:', data.result)
-            }
-          } else if (typeof data.result === 'object') {
-            response = data.result as LikeResponse
-          }
-        }
-        if (response && typeof response.like_count === 'number') {
-          item.like_count = response.like_count
-        } else {
-          // 3. 请求失败，回滚本地+1
-          item.like_count -= 1
-          console.error('点赞请求失败，已回滚:', err)
-        }
-      }
-    )
+  @State toastMessage: string = '';
+  showToast(message: string) {
+    this.toastMessage = message;
+    setTimeout(() => {
+      prompt.showToast({ message: this.toastMessage });
+    }, 0);
   }
 
   private async updateViews(item: AntiqueItem): Promise<void> {
@@ -202,7 +187,7 @@ export default struct Antique {
 
       let httpRequest = http.createHttp();
       httpRequest.request(
-        `http://localhost:3000/api/antique/views/${item.id}`,
+        `http://10.4.122.66:3000/api/antique/views/${item.id}`,
         {
           method: http.RequestMethod.POST,
           header: { 'Content-Type': 'application/json' },
@@ -260,7 +245,7 @@ export default struct Antique {
         fs.closeSync(fileTemp);
         console.info('开始上传图片，图片URI:', imageUri_1);
 
-        const uploadUrl: string = 'http://10.4.90.212:5000/search_similar';
+        const uploadUrl: string = 'http://10.4.122.66:5000/search_similar';
         const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
           method: http.RequestMethod.POST,
           header: {
@@ -453,6 +438,7 @@ export default struct Antique {
                   .fontSize(12)
                   .fontColor('#666666')
               }
+              .backgroundColor(Color.Transparent)
               .width('100%')
               .justifyContent(FlexAlign.Start)
               .margin({ top: 4 })
@@ -474,5 +460,12 @@ export default struct Antique {
     .width('100%')
     .height('100%')
     .backgroundColor('#F7F8FA')
+  }
+
+  onPageHide() {
+    if (this.likeChangeSubscription) {
+      emitter.off('relicLikeChanged', this.likeChangeSubscription);
+      this.likeChangeSubscription = null;
+    }
   }
 }
