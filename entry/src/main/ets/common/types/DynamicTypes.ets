@@ -19,6 +19,7 @@ export interface APICommentItem {
   like_count: number;
   avatar?: string;
   replies?: APICommentItem[];
+  user_id: number;
 }
 
 export interface APIDynamicResponse {
@@ -31,11 +32,13 @@ export interface APIDynamicResponse {
   username: string;
   images: ImageItem[];
   comments: APICommentItem[];
+  user_id: number;
 }
 
 export class CommentItem {
   id: number;
   user: string;
+  user_id: number;
   content: string;
   time: string;
   parent_id?: number;
@@ -49,7 +52,8 @@ export class CommentItem {
     time: string,
     parent_id?: number,
     reply_count: number = 0,
-    replies: CommentItem[] = []
+    replies: CommentItem[] = [],
+    user_id: number = 0
   ) {
     this.id = id;
     this.user = user;
@@ -58,6 +62,7 @@ export class CommentItem {
     this.parent_id = parent_id;
     this.reply_count = reply_count;
     this.replies = replies;
+    this.user_id = user_id;
   }
 }
 
@@ -73,6 +78,7 @@ export class DynamicItem {
   comments: CommentItem[];
   showComments: boolean;
   reply_count: number;
+  user_id: number;
 
   constructor(
     id: number,
@@ -85,7 +91,8 @@ export class DynamicItem {
     isLiked: boolean = false,
     avatar: Resource = $r("app.media.default_avatar"),
     showComments: boolean = false,
-    reply_count: number = 0
+    reply_count: number = 0,
+    user_id: number = 0
   ) {
     this.id = id;
     this.username = username;
@@ -98,6 +105,7 @@ export class DynamicItem {
     this.avatar = avatar;
     this.showComments = showComments;
     this.reply_count = reply_count;
+    this.user_id = user_id;
   }
 
   private formatTime(isoTime: string): string {

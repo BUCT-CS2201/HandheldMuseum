@@ -6,10 +6,13 @@ import EventHub from '../common/utils/EventHub';
 import { UserStore } from '../common/UserStore';
 import preferences from '@ohos.data.preferences';
 import prompt from '@ohos.prompt';
+import emitter from '@ohos.events.emitter';
 
 // 本地图片存储配置
-const LOCAL_IMAGE_BASE = 'file:///data/storage/el2/base/cache/uploads/';
-const BACKEND_IMAGE_BASE = 'http://10.4.37.15:3000/uploads/DynamicUPloads/';
+const LOCAL_IMAGE_BASE = 'file:///data/storage/el2/base/cache/comment_image/';
+const BACKEND_IMAGE_BASE = 'http://10.4.69.110:3000/comment_image/';
+// const BACKEND_IMAGE_BASE = 'http://10.4.69.110:3000/uploads/DynamicUploads/';
+
 
 // 在文件开头的import语句后添加接口定义
 interface LikeResponse {
@@ -30,6 +33,10 @@ interface ErrorResponse {
   error: string;
 }
 
+interface LikeCheckResponse {
+  isLiked: boolean;
+}
+
 @Component
 struct DynamicItemComponent {
   @Prop item: DynamicItem;
@@ -38,6 +45,7 @@ struct DynamicItemComponent {
   @State commentText: string = '';
   @State showFullImage: boolean = false;
   @State selectedImage: string = '';
+  @State selectedImageIndex: number = 0;
   @State comments: CommentItem[] = [];
   @State replyTo: string = '';
   @State replyToId: number | undefined = undefined;
@@ -53,17 +61,20 @@ struct DynamicItemComponent {
     if (this.showComments) {
       this.loadComments();
     }
+    await this.checkUserLikeStatus();
   }
 
   async initPreferences() {
     try {
       this.userPreferences = await preferences.getPreferences(getContext(), 'userInfo');
       const userId = await this.userPreferences.get('userId', 0) as number;
-      const username = await this.userPreferences.get('username', '') as string;
+      console.debug('从preferences获取用户ID:', userId);
+
       this.currentUserId = userId;
-      this.currentUsername = username;
+      console.debug('设置当前用户ID:', this.currentUserId);
     } catch (error) {
       console.error('初始化偏好设置失败:', error);
+      this.currentUserId = 0;
     }
   }
 
@@ -72,11 +83,21 @@ struct DynamicItemComponent {
   }
 
   async checkLogin(): Promise<boolean> {
-    if (!this.currentUserId) {
+    if(!this.userPreferences) {
+      return false;
+    }
+    const userId = await this.userPreferences.get('userId', 0) as number;
+    console.debug( "userid:",userId.toString()) ;
+    if (!userId  ) {
       this.showToast('请先登录');
       router.pushUrl({ url: 'pages/Login' });
       return false;
     }
+    // if (!this.currentUserId) {
+    //   this.showToast('请先登录');
+    //   router.pushUrl({ url: 'pages/Login' });
+    //   return false;
+    // }
     return true;
   }
 
@@ -88,7 +109,7 @@ struct DynamicItemComponent {
       console.log('开始加载评论，动态ID:', this.item.id);
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
-        `http://10.4.37.15:3000/api/dynamic/comments/${this.item.id}`,
+        `http://10.4.69.110:3000/api/dynamic/comments/${this.item.id}`,
         {
           method: http.RequestMethod.GET,
           header: {
@@ -102,31 +123,51 @@ struct DynamicItemComponent {
 
       if (response.responseCode === 200) {
         const commentsData: APICommentItem[] = JSON.parse(response.result as string);
-        console.log('解析后的评论数据:', commentsData);
+        console.log('解析后的评论数据:', JSON.stringify(commentsData, null, 2));
 
         // 直接使用后端返回的评论树结构
         const rootComments = commentsData.map(c => {
-          console.log('处理评论项:', c);
+          console.log('处理评论项:', JSON.stringify(c, null, 2));
+          console.log('评论用户ID:', c.user_id, '类型:', typeof c.user_id);
+
+          // 确保user_id是数字类型
+          const userId = Number(c.user_id);
+          console.log('转换后的用户ID:', userId, '类型:', typeof userId);
+
           const comment = new CommentItem(
             c.comment_id,
             c.username,
             c.content,
             c.create_time,
             c.parent_id,
-            c.reply_count
+            c.reply_count,
+            [],
+            //userId
+            c.user_id
           );
+          console.log('创建的评论对象:', JSON.stringify(comment, null, 2));
 
           // 递归处理子评论
           if (c.replies && c.replies.length > 0) {
             comment.replies = c.replies.map(reply => {
+              console.log('处理子评论:', JSON.stringify(reply, null, 2));
+              console.log('子评论用户ID:', reply.user_id, '类型:', typeof reply.user_id);
+
+              // 确保user_id是数字类型
+              const replyUserId = Number(reply.user_id);
+              console.log('转换后的子评论用户ID:', replyUserId, '类型:', typeof replyUserId);
+
               const replyComment = new CommentItem(
                 reply.comment_id,
                 reply.username,
                 reply.content,
                 reply.create_time,
                 reply.parent_id,
-                reply.reply_count
+                reply.reply_count,
+                [],
+                replyUserId
               );
+              console.log('创建的子评论对象:', JSON.stringify(replyComment, null, 2));
               // 递归处理更深层级的回复
               if (reply.replies && reply.replies.length > 0) {
                 replyComment.replies = reply.replies.map(subReply => {
@@ -136,7 +177,9 @@ struct DynamicItemComponent {
                     subReply.content,
                     subReply.create_time,
                     subReply.parent_id,
-                    subReply.reply_count
+                    subReply.reply_count,
+                    [],
+                    subReply.user_id
                   );
                 });
               } else {
@@ -153,6 +196,7 @@ struct DynamicItemComponent {
         });
 
         console.log('最终构建的评论树:', rootComments);
+        console.log('this.currentUserId:', this.currentUserId);
         this.comments = rootComments;
 
         // 强制更新视图
@@ -191,7 +235,7 @@ struct DynamicItemComponent {
 
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
-        "http://10.4.37.15:3000/api/dynamic/comment",
+        "http://10.4.69.110:3000/api/dynamic/comment",
         {
           method: http.RequestMethod.POST,
           header: {
@@ -215,14 +259,22 @@ struct DynamicItemComponent {
         const result: CommentResponse = JSON.parse(response.result as string);
         console.log('评论提交成功，返回数据:', result);
 
+
         // 重新加载评论列表
         await this.loadComments();
 
+        // 更新动态的回复数
+        this.item.reply_count += 1;
+
+        // 清空评论输入
         this.commentText = '';
         this.replyTo = '';
         this.replyToId = undefined;
         this.showCommentInput = false;
         this.showToast('评论成功');
+
+        // 强制更新视图
+        this.comments = [...this.comments];
       } else {
         const errorData: ErrorResponse = JSON.parse(response.result as string);
         console.error('评论提交失败:', errorData);
@@ -238,7 +290,7 @@ struct DynamicItemComponent {
     try {
       let httpRequest = http.createHttp();
       let response = await httpRequest.request(
-        `http://10.4.37.15:3000/api/dynamic/comment/${commentId}`,
+        `http://10.4.69.110:3000/api/dynamic/comment/${commentId}`,
         {
           method: http.RequestMethod.DELETE,
           header: {
@@ -251,10 +303,96 @@ struct DynamicItemComponent {
       );
 
       if (response.responseCode === 200) {
+        // 在前端删除评论
+        const deleteCommentFromList = (comments: CommentItem[]): CommentItem[] => {
+          return comments.filter(comment => {
+            if (comment.id === commentId) {
+              return false;
+            }
+            if (comment.replies && comment.replies.length > 0) {
+              comment.replies = deleteCommentFromList(comment.replies);
+            }
+            return true;
+          });
+        };
+
+        this.comments = deleteCommentFromList(this.comments);
+        // 强制更新视图
+        this.comments = [...this.comments];
+
+        // 更新动态的回复数
+        this.item.reply_count -= 1;
+
+        // 重新加载评论列表以更新回复数
         await this.loadComments();
+
+        // 显示删除成功提示
+        this.showToast('评论已删除');
+      } else {
+        const errorData: ErrorResponse = JSON.parse(response.result as string);
+        this.showToast('删除评论失败: ' + errorData.error);
       }
     } catch (error) {
       console.error('删除评论失败:', error);
+      this.showToast('删除评论失败');
+    }
+  }
+
+  async checkUserLikeStatus() {
+    if (!this.currentUserId) return;
+
+    try {
+      let httpRequest = http.createHttp();
+      let response = await httpRequest.request(
+        `http://10.4.69.110:3000/api/dynamic/check-like/${this.item.id}`,
+        {
+          method: http.RequestMethod.GET,
+          header: {
+            'Content-Type': 'application/json'
+          },
+          extraData: JSON.stringify({
+            user_id: this.currentUserId
+          })
+        }
+      );
+
+      if (response.responseCode === 200) {
+        const result: LikeCheckResponse = JSON.parse(response.result as string);
+        this.isLiked = result.isLiked;
+      }
+    } catch (error) {
+      console.error('检查点赞状态失败:', error);
+    }
+  }
+
+  async handleLike() {
+    if (!await this.checkLogin()) return;
+
+    try {
+      let httpRequest = http.createHttp();
+      let response = await httpRequest.request(
+        "http://10.4.69.110:3000/api/dynamic/like",
+        {
+          method: http.RequestMethod.POST,
+          header: {
+            'Content-Type': 'application/json'
+          },
+          extraData: JSON.stringify({
+            dynamic_id: this.item.id,
+            user_id: this.currentUserId,
+            action: this.isLiked ? 'unlike' : 'like'
+          })
+        }
+      );
+
+      if (response.responseCode === 200) {
+        const result: LikeResponse = JSON.parse(response.result as string);
+        this.isLiked = result.isLiked;
+        this.item.likes = result.newLikeCount;
+      }
+    } catch (error) {
+      console.error('点赞操作失败:', error);
+      this.showToast('操作失败，请重试');
     }
   }
 
@@ -328,7 +466,8 @@ struct DynamicItemComponent {
                 }
               })
 
-            if (comment.user === this.currentUsername) {
+            if (this.currentUserId > 0 && comment.user_id === this.currentUserId) {
+              // console.log('显示删除按钮 - 当前用户ID:', this.currentUserId, '评论用户ID:', comment.user_id);
               Text('删除')
                 .fontSize(level === 0 ? 12 : 10)
                 .fontColor('#FF3A30')
@@ -336,6 +475,8 @@ struct DynamicItemComponent {
                 .onClick(() => {
                   this.deleteComment(comment.id);
                 })
+            } else {
+              // console.log('不显示删除按钮 - 当前用户ID:', this.currentUserId, '评论用户ID:', comment.user_id);
             }
           }
           .margin({ top: 4 })
@@ -370,244 +511,240 @@ struct DynamicItemComponent {
   }
 
   build() {
-    Column() {
-      // 卡片容器
+    Stack({ alignContent: Alignment.Top }) {
+      // 主内容
       Column() {
-        // 用户信息
-        Row() {
-          Image(this.item.avatar)
-            .width(56)
-            .height(56)
-            .borderRadius(28)
-            .margin({ right: 16 })
-            .shadow({ radius: 4, color: '#20000000', offsetX: 0, offsetY: 2 })
+        // 卡片容器
+        Column() {
+          // 用户信息
+          Row() {
+            Image(this.item.avatar)
+              .width(56)
+              .height(56)
+              .borderRadius(28)
+              .margin({ right: 16 })
+              .shadow({ radius: 4, color: '#20000000', offsetX: 0, offsetY: 2 })
 
-          Column() {
-            Text(this.item.username)
-              .fontSize(18)
-              .fontColor('#333333')
-              .fontWeight(FontWeight.Medium)
-              .margin({ bottom: 4 })
+            Column() {
+              Text(this.item.username)
+                .fontSize(18)
+                .fontColor('#333333')
+                .fontWeight(FontWeight.Medium)
+                .margin({ bottom: 4 })
 
-            Text(this.item.time)
-              .fontSize(14)
-              .fontColor('#999999')
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-        }
-        .width('100%')
-        .padding({ top: 16, bottom: 16 })
-
-        // 动态内容
-        Text(this.item.content)
-          .fontSize(16)
-          .fontColor('#333333')
-          .lineHeight(24)
-          .margin({ bottom: 16 })
-          .width('100%')
-
-        // 图片展示
-        if (this.item.images && this.item.images.length > 0) {
-          Grid() {
-            ForEach(this.item.images, (imgPath: string) => {
-              GridItem() {
-                Image(imgPath)
-                  .width('100%')
-                  .aspectRatio(1)
-                  .objectFit(ImageFit.Cover)
-                  .borderRadius(12)
-                  .onClick(() => {
-                    this.selectedImage = imgPath;
-                    this.showFullImage = true;
-                  })
-              }
-            })
-          }
-          .columnsTemplate('1fr 1fr 1fr')
-          .rowsGap(8)
-          .columnsGap(8)
-          .margin({ bottom: 16 })
-        }
-
-        // 互动按钮
-        Row() {
-          // 点赞按钮
-          Button({ type: ButtonType.Normal }) {
-            Row() {
-              Image($r('app.media.ic_like'))
-                .width(24)
-                .height(24)
-                .fillColor(this.isLiked ? '#FF3A30' : '#666666')
-                .margin({ right: 6 })
-
-              Text(this.item.likes.toString())
-                .fontSize(16)
-                .fontColor(this.isLiked ? '#FF3A30' : '#666666')
-            }
-          }
-          .onClick(() => {
-            this.isLiked = !this.isLiked;
-            EventHub.emit('dynamic:like', this.item);
-          })
-          .backgroundColor(Color.Transparent)
-          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-          .borderRadius(20)
-          .margin({ right: 24 })
-
-          // 评论按钮
-          Button({ type: ButtonType.Normal }) {
-            Row() {
-              Image($r('app.media.ic_comment'))
-                .width(24)
-                .height(24)
-                .fillColor('#666666')
-                .margin({ right: 6 })
-
-              Text(`评论 ${this.item.reply_count}`)
-                .fontSize(16)
-                .fontColor('#666666')
-            }
-          }
-          .onClick(async () => {
-
-            this.showComments = !this.showComments;
-            if (this.showComments) {
-              this.loadComments();
-            }
-          })
-          .backgroundColor(Color.Transparent)
-          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-          .borderRadius(20)
-        }
-        .margin({ bottom: 16 })
-
-        // 评论列表
-        if (this.showComments) {
-          Column() {
-            if (this.loadingComments) {
-              LoadingProgress()
-                .width(24)
-                .height(24)
-                .margin({ top: 16, bottom: 16 })
-            } else if (this.comments.length === 0) {
-              Text('暂无评论')
+              Text(this.item.time)
                 .fontSize(14)
                 .fontColor('#999999')
-                .margin({ top: 16, bottom: 16 })
-            } else {
-              Column() {
-                ForEach(this.comments, (comment: CommentItem) => {
-                  this.renderComment(comment, 0)
-                })
-              }
-              .width('100%')
-              .animation({
-                duration: 300,
-                curve: Curve.EaseInOut
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+          }
+          .width('100%')
+          .padding({ top: 16, bottom: 16 })
+
+          // 动态内容
+          Text(this.item.content)
+            .fontSize(16)
+            .fontColor('#333333')
+            .lineHeight(24)
+            .margin({ bottom: 16 })
+            .width('100%')
+
+          // 图片展示
+          if (this.item.images && this.item.images.length > 0) {
+            Grid() {
+              ForEach(this.item.images, (imgPath: string, index: number) => {
+                GridItem() {
+                  Image(imgPath)
+                    .width('100%')
+                    .aspectRatio(1)
+                    .objectFit(ImageFit.Cover)
+                    .borderRadius(12)
+                    .onClick(() => {
+                      this.selectedImage = imgPath;
+                      this.selectedImageIndex = index;
+                      this.showFullImage = true;
+                    })
+                }
               })
             }
+            .columnsTemplate('1fr 1fr 1fr')
+            .rowsGap(8)
+            .columnsGap(8)
+            .margin({ bottom: 16 })
+          }
 
-            // 添加评论按钮
+          // 互动按钮
+          Row() {
+            // 点赞按钮
+            Button({ type: ButtonType.Normal }) {
+              Row() {
+                Image($r('app.media.ic_like'))
+                  .width(24)
+                  .height(24)
+                  .fillColor(this.isLiked ? '#FF3A30' : '#666666')
+                  .margin({ right: 6 })
+
+                Text(this.item.likes.toString())
+                  .fontSize(16)
+                  .fontColor(this.isLiked ? '#FF3A30' : '#666666')
+              }
+            }
+            .onClick(() => this.handleLike())
+            .backgroundColor(Color.Transparent)
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .borderRadius(20)
+            .margin({ right: 24 })
+
+            // 评论按钮
             Button({ type: ButtonType.Normal }) {
               Row() {
                 Image($r('app.media.ic_comment'))
-                  .width(20)
-                  .height(20)
+                  .width(24)
+                  .height(24)
                   .fillColor('#666666')
-                  .margin({ right: 8 })
+                  .margin({ right: 6 })
 
-                Text('添加评论...')
-                  .fontSize(14)
+                Text(`评论 ${this.item.reply_count}`)
+                  .fontSize(16)
                   .fontColor('#666666')
               }
             }
-            .width('100%')
-            .height(40)
-            .backgroundColor('#F0F0F0')
-            .borderRadius(20)
             .onClick(async () => {
-              if (!await this.checkLogin()) return;
-              if (this.showCommentInput) {
-                this.showCommentInput = false;
-                this.replyTo = '';
-                this.replyToId = undefined;
-              } else {
-                this.showCommentInput = true;
-                this.replyTo = '';
-                this.replyToId = undefined;
+              this.showComments = !this.showComments;
+              if (this.showComments) {
+                this.loadComments();
               }
             })
-            .margin({ bottom: 16 })
+            .backgroundColor(Color.Transparent)
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .borderRadius(20)
+          }
+          .margin({ bottom: 16 })
 
-            // 评论输入框
-            if (this.showCommentInput) {
-              Column() {
-                if (this.replyTo) {
-                  Row() {
-                    Text(`回复 ${this.replyTo}:`)
-                      .fontSize(14)
-                      .fontColor('#666666')
-                      .margin({ left: 12, bottom: 8 })
-                  }
-                  .width('100%')
-                }
-
-                Row() {
-                  TextInput({
-                    placeholder: this.replyTo ? `回复 ${this.replyTo}...` : '添加评论...',
-                    text: this.commentText
+          // 评论列表
+          if (this.showComments) {
+            Column() {
+              if (this.loadingComments) {
+                LoadingProgress()
+                  .width(24)
+                  .height(24)
+                  .margin({ top: 16, bottom: 16 })
+              } else if (this.comments.length === 0) {
+                Text('暂无评论')
+                  .fontSize(14)
+                  .fontColor('#999999')
+                  .margin({ top: 16, bottom: 16 })
+              } else {
+                Column() {
+                  ForEach(this.comments, (comment: CommentItem) => {
+                    this.renderComment(comment, 0)
                   })
-                    .height(40)
-                    .layoutWeight(1)
-                    .fontSize(16)
-                    .backgroundColor('#FFFFFF')
-                    .padding(8)
-                    .borderRadius(20)
-                    .onChange((value: string) => {
-                      console.log('评论内容变化:', value);
-                      this.commentText = value;
-                    })
-                    .onSubmit(() => {
-                      console.log('触发表单提交');
-                      this.submitComment();
-                    })
-
-                  Button('发送')
-                    .width(60)
-                    .height(40)
-                    .fontSize(14)
-                    .fontColor('#FFFFFF')
-                    .backgroundColor(this.commentText.trim() ? '#007AFF' : '#CCCCCC')
-                    .borderRadius(20)
-                    .margin({ left: 8 })
-                    .enabled(this.commentText.trim().length > 0)
-                    .onClick(() => {
-                      console.log('点击发送按钮，当前评论内容:', this.commentText);
-                      this.submitComment();
-                    })
                 }
                 .width('100%')
-                .padding({ left: 12, right: 12, bottom: 8 })
+                .animation({
+                  duration: 300,
+                  curve: Curve.EaseInOut
+                })
+              }
+
+              // 添加评论按钮
+              Button({ type: ButtonType.Normal }) {
+                Row() {
+                  Image($r('app.media.ic_comment'))
+                    .width(20)
+                    .height(20)
+                    .fillColor('#666666')
+                    .margin({ right: 8 })
+
+                  Text('添加评论...')
+                    .fontSize(14)
+                    .fontColor('#666666')
+                }
               }
               .width('100%')
-              .backgroundColor('#F5F5F5')
-              .padding({ top: 8, bottom: 12 })
-            }
-          }
-          .margin({ top: 8 })
-          .animation({
-            duration: 300,
-            curve: Curve.EaseInOut
-          })
-        }
-      }
-      .padding({ left: 20, right: 20 })
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
-      .shadow({ radius: 12, color: '#10000000', offsetX: 0, offsetY: 4 })
+              .height(40)
+              .backgroundColor('#F0F0F0')
+              .borderRadius(20)
+              .onClick(async () => {
+                if (!await this.checkLogin()) return;
+                if (this.showCommentInput) {
+                  this.showCommentInput = false;
+                  this.replyTo = '';
+                  this.replyToId = undefined;
+                } else {
+                  this.showCommentInput = true;
+                  this.replyTo = '';
+                  this.replyToId = undefined;
+                }
+              })
+              .margin({ bottom: 16 })
 
-      // 全屏图片预览
+              // 评论输入框
+              if (this.showCommentInput) {
+                Column() {
+                  if (this.replyTo) {
+                    Row() {
+                      Text(`回复 ${this.replyTo}:`)
+                        .fontSize(14)
+                        .fontColor('#666666')
+                        .margin({ left: 12, bottom: 8 })
+                    }
+                    .width('100%')
+                  }
+
+                  Row() {
+                    TextInput({
+                      placeholder: this.replyTo ? `回复 ${this.replyTo}...` : '添加评论...',
+                      text: this.commentText
+                    })
+                      .height(40)
+                      .layoutWeight(1)
+                      .fontSize(16)
+                      .backgroundColor('#FFFFFF')
+                      .padding(8)
+                      .borderRadius(20)
+                      .onChange((value: string) => {
+                        this.commentText = value;
+                      })
+                      .onSubmit(() => {
+                        this.submitComment();
+                      })
+
+                    Button('发送')
+                      .width(60)
+                      .height(40)
+                      .fontSize(14)
+                      .fontColor('#FFFFFF')
+                      .backgroundColor(this.commentText.trim() ? '#007AFF' : '#CCCCCC')
+                      .borderRadius(20)
+                      .margin({ left: 8 })
+                      .enabled(this.commentText.trim().length > 0)
+                      .onClick(() => {
+                        this.submitComment();
+                      })
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, bottom: 8 })
+                }
+                .width('100%')
+                .backgroundColor('#F5F5F5')
+                .padding({ top: 8, bottom: 12 })
+              }
+            }
+            .margin({ top: 8 })
+            .animation({
+              duration: 300,
+              curve: Curve.EaseInOut
+            })
+          }
+        }
+        .padding({ left: 20, right: 20 })
+        .backgroundColor('#FFFFFF')
+        .borderRadius(16)
+        .shadow({ radius: 12, color: '#10000000', offsetX: 0, offsetY: 4 })
+      }
+      // 全屏图片预览层
       if (this.showFullImage) {
         Stack({ alignContent: Alignment.Center }) {
           // 半透明黑色遮罩
@@ -633,15 +770,19 @@ struct DynamicItemComponent {
                 })
             })
           }
+          .index(this.selectedImageIndex)
           .indicator(false)
           .loop(false)
           .width('100%')
-          .height('80%')
+          .height('100%')
           .zIndex(10000)
         }
+        .width('100%')
+        .height('100%')
+        .position({ x: 0, y: 0 })
+        .zIndex(10001)
       }
     }
-    .padding(12)
   }
 }
 
@@ -652,22 +793,55 @@ struct UserDynamic {
   @State loading: boolean = true;
   @State errorMessage: string = '';
   @State refreshing: boolean = false;
+  @State showMyDynamics: boolean = false;
   private userPreferences: preferences.Preferences | null = null;
   @State currentUserId: number = 0;
+  @State currentUsername: string = '';
+  private loginEventListener: ((data: emitter.EventData) => void) | null = null;
 
   async aboutToAppear() {
     await this.initPreferences();
-    this.loadData();
     EventHub.on('dynamic:like', this.handleLike.bind(this));
+
+    // 添加登录状态变化监听
+    this.loginEventListener = () => {
+      this.resetState();
+    };
+    emitter.on('loginStateChanged', this.loginEventListener);
+  }
+
+  aboutToDisappear() {
+    // 移除事件监听
+    if (this.loginEventListener) {
+      emitter.off('loginStateChanged', this.loginEventListener);
+      this.loginEventListener = null;
+    }
+    EventHub.off('dynamic:like', this.handleLike.bind(this));
+  }
+
+  // 重置所有状态
+  private resetState() {
+    this.dynamics = [];
+    this.loading = true;
+    this.errorMessage = '';
+    this.refreshing = false;
+    this.showMyDynamics = false;
+    this.currentUserId = 0;
+    this.currentUsername = '';
+    this.loadData();
   }
 
   async initPreferences() {
     try {
       this.userPreferences = await preferences.getPreferences(getContext(), 'userInfo');
       const userId = await this.userPreferences.get('userId', 0) as number;
+      console.debug('从preferences获取用户ID:', userId);
+
       this.currentUserId = userId;
+      console.debug('设置当前用户ID:', this.currentUserId);
     } catch (error) {
       console.error('初始化偏好设置失败:', error);
+      this.currentUserId = 0;
     }
   }
 
@@ -676,7 +850,12 @@ struct UserDynamic {
   }
 
   async checkLogin(): Promise<boolean> {
-    if (!this.currentUserId) {
+    if(!this.userPreferences) {
+      return false;
+    }
+    const userId = await this.userPreferences.get('userId', 0) as number;
+    console.debug("userid:", userId.toString());
+    if (!userId) {
       this.showToast('请先登录');
       router.pushUrl({ url: 'pages/Login' });
       return false;
@@ -687,10 +866,30 @@ struct UserDynamic {
   async loadData(): Promise<void> {
     let httpRequest = http.createHttp();
     try {
+      // 只在查看"我的动态"时才进行登录验证
+      if (this.showMyDynamics) {
+        if (!this.userPreferences || !this.currentUserId) {
+          await this.initPreferences();
+          if (!this.currentUserId) {
+            console.error('无法获取用户ID，停止加载数据');
+            return;
+          }
+        }
+      }
+
       console.log('开始加载动态数据');
+      console.log('当前用户ID:', this.currentUserId);
+      console.log('是否显示我的动态:', this.showMyDynamics);
+
+      // 根据是否显示我的动态选择不同的接口
+      const url = this.showMyDynamics
+        ? `http://10.4.69.110:3000/api/dynamic/list?user_id=${this.currentUserId}`
+        : "http://10.4.69.110:3000/api/dynamic/list";
+
+      console.log('请求URL:', url);
 
       let response = await httpRequest.request(
-        "http://localhost:3000/api/dynamic/list",
+        url,
         {
           method: http.RequestMethod.GET,
           header: {
@@ -701,8 +900,8 @@ struct UserDynamic {
 
       console.log('收到响应:', response.responseCode);
       if (response.responseCode === 200) {
-        const responseData = JSON.parse(response.result as string) as APIDynamicResponse[];
-        console.log('解析后的数据:', responseData);
+        let responseData = JSON.parse(response.result as string) as APIDynamicResponse[];
+        console.log('解析后的原始数据:', JSON.stringify(responseData, null, 2));
 
         if (!Array.isArray(responseData)) {
           console.error('返回数据不是数组:', responseData);
@@ -710,7 +909,6 @@ struct UserDynamic {
         }
 
         const dynamics = responseData.map(item => {
-          console.log('处理动态项:', item);
           return new DynamicItem(
             item.dynamic_id,
             item.username,
@@ -788,7 +986,7 @@ struct UserDynamic {
       });
 
       let response = await httpRequest.request(
-        "http://localhost:3000/api/dynamic/like",
+        "http://10.4.69.110:3000/api/dynamic/like",
         {
           method: http.RequestMethod.POST,
           header: {
@@ -874,7 +1072,16 @@ struct UserDynamic {
       return [];
     }
     return comments.map(c =>
-    new CommentItem(c.comment_id, c.username, c.content, c.create_time)
+    new CommentItem(
+      c.comment_id,
+      c.username,
+      c.content,
+      c.create_time,
+      c.parent_id,
+      c.reply_count,
+      [],
+      c.user_id
+    )
     );
   }
 
@@ -883,11 +1090,35 @@ struct UserDynamic {
       Column() {
         // 标题栏
         Row() {
-          Text('用户动态')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .layoutWeight(1)
-
+          Row() {
+            Button('所有动态')
+              .width(100)
+              .height(40)
+              .fontSize(16)
+              .fontColor(this.showMyDynamics ? '#666666' : '#FFFFFF')
+              .backgroundColor(this.showMyDynamics ? '#F0F0F0' : '#ff080809')
+              .borderRadius(20)
+              .onClick(() => {
+                this.showMyDynamics = false;
+                this.loadData();
+              })
+            Button('我的动态')
+              .width(100)
+              .height(40)
+              .fontSize(16)
+              .fontColor(this.showMyDynamics ? '#FFFFFF' : '#666666')
+              .backgroundColor(this.showMyDynamics ? '#ff080809' : '#F0F0F0')
+              .borderRadius(20)
+              .margin({ left: 12 })
+              .onClick(async () => {
+                if (!await this.checkLogin()) {
+                  return;
+                }
+                this.showMyDynamics = true;
+                this.loadData();
+              })
+          }
+          .layoutWeight(1)
           Button('+ 发布')
             .width(100)
             .height(56)
@@ -897,7 +1128,7 @@ struct UserDynamic {
             .fontWeight(FontWeight.Bold)
             .borderRadius(28)
             .onClick(async () => {
-               if (!await this.checkLogin()) return;
+              if (!await this.checkLogin()) return;
               router.pushUrl({ url: 'pages/DynamicPublish' });
             })
         }
@@ -905,7 +1136,7 @@ struct UserDynamic {
         .width('100%')
         .backgroundColor('#FFFFFF')
         .shadow({ radius: 4, color: '#10000000', offsetX: 0, offsetY: 2 })
-
+        .backgroundColor('#F5E6D3')
         if (this.loading) {
           Column() {
             LoadingProgress()

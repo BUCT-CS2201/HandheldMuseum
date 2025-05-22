@@ -6,9 +6,20 @@ const path = require('path')
 const fs = require('fs')
 
 // 确保上传目录存在
-const uploadDir = path.join(__dirname, '../uploads/DynamicUploads')
+const uploadDir = path.join(__dirname, '../comment_image')
+// const uploadDir = path.join(__dirname, '../uploads/DynamicUploads')
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true })
+  // 设置文件夹权限为 755 (所有者可读写执行，其他用户可读执行)
+  fs.chmodSync(uploadDir, '755')
+}
+
+// 确保文件夹有正确的权限
+try {
+  fs.chmodSync(uploadDir, '755')
+} catch (err) {
+  console.error('设置文件夹权限失败:', err)
 }
 
 // 配置multer
@@ -83,7 +94,10 @@ router.post('/publish', async (req, res) => {
 router.get('/list', async (req, res) => {
   try {
     console.log('开始获取动态列表')
-    const sql = `
+    const { user_id } = req.query; // 添加user_id参数
+    console.log('请求参数:', { user_id });
+
+    let sql = `
       SELECT
         c.comment_id as dynamic_id,
         c.content,
@@ -91,6 +105,7 @@ router.get('/list', async (req, res) => {
         c.status as comment_status,
         c.like_count,
         c.reply_count,
+        c.user_id,
         u.name AS username,
         COALESCE(
           CONCAT(
@@ -112,9 +127,18 @@ router.get('/list', async (req, res) => {
       WHERE c.relic_id = 0
       AND c.is_deleted = 0
       AND c.parent_id = 0
-      GROUP BY c.comment_id
+    `;
+
+    // 如果提供了user_id，添加用户过滤条件
+    if (user_id) {
+      sql += ` AND c.user_id = ${user_id}`;
+    }
+
+    sql += `
+      GROUP BY c.comment_id, c.user_id, u.name
       ORDER BY c.create_time DESC
-    `
+    `;
+
     console.log('执行SQL查询:', sql)
     const results = await mysqlService.query(sql)
     console.log('查询结果:', results)
@@ -198,10 +222,10 @@ router.get('/image/:imageId', async (req, res) => {
 // 点赞/取消点赞接口
 router.post('/like', async (req, res) => {
   console.log('收到点赞请求:', req.body);
-  const { dynamic_id, action } = req.body;
+  const { dynamic_id, user_id, action } = req.body;
 
-  if (!dynamic_id || !action) {
-    console.log('参数不完整:', { dynamic_id, action });
+  if (!dynamic_id || !user_id || !action) {
+    console.log('参数不完整:', { dynamic_id, user_id, action });
     return res.status(400).json({ error: '参数不完整' });
   }
 
@@ -212,48 +236,57 @@ router.post('/like', async (req, res) => {
       FROM relic_comment
       WHERE comment_id = ? AND is_deleted = 0
     `;
-    console.log('检查动态是否存在:', checkSql, [dynamic_id]);
     const [existingComment] = await mysqlService.query(checkSql, [dynamic_id]);
 
     if (!existingComment) {
-      console.log('动态不存在:', dynamic_id);
       return res.status(404).json({ error: '动态不存在' });
     }
 
-    // 根据action决定是增加还是减少点赞数
-    const updateSql = `
-      UPDATE relic_comment
-      SET like_count = like_count ${action === 'like' ? '+ 1' : '- 1'}
-      WHERE comment_id = ? AND is_deleted = 0
+    // 检查用户是否已经点赞
+    const checkLikeSql = `
+      SELECT 1 FROM comment_like 
+      WHERE comment_id = ? AND user_id = ?
     `;
-    console.log('执行SQL:', updateSql, [dynamic_id]);
+    const [existingLike] = await mysqlService.query(checkLikeSql, [dynamic_id, user_id]);
+    const hasLiked = !!existingLike;
 
-    const updateResult = await mysqlService.query(updateSql, [dynamic_id]);
-    console.log('更新结果:', updateResult);
-
-    if (updateResult.affectedRows === 0) {
-      console.log('更新失败，没有记录被修改');
-      return res.status(500).json({ error: '点赞操作失败' });
+    // 根据action和当前点赞状态决定操作
+    if (action === 'like' && !hasLiked) {
+      // 添加点赞记录
+      await mysqlService.query(
+        'INSERT INTO comment_like (comment_id, user_id) VALUES (?, ?)',
+        [dynamic_id, user_id]
+      );
+      // 增加点赞数
+      await mysqlService.query(
+        'UPDATE relic_comment SET like_count = like_count + 1 WHERE comment_id = ?',
+        [dynamic_id]
+      );
+    } else if (action === 'unlike' && hasLiked) {
+      // 删除点赞记录
+      await mysqlService.query(
+        'DELETE FROM comment_like WHERE comment_id = ? AND user_id = ?',
+        [dynamic_id, user_id]
+      );
+      // 减少点赞数
+      await mysqlService.query(
+        'UPDATE relic_comment SET like_count = like_count - 1 WHERE comment_id = ?',
+        [dynamic_id]
+      );
     }
 
     // 获取更新后的点赞数
-    const getCountSql = `
-      SELECT like_count
-      FROM relic_comment
-      WHERE comment_id = ?
-    `;
-    console.log('执行SQL:', getCountSql, [dynamic_id]);
-    const [result] = await mysqlService.query(getCountSql, [dynamic_id]);
-    console.log('查询结果:', result);
+    const [result] = await mysqlService.query(
+      'SELECT like_count FROM relic_comment WHERE comment_id = ?',
+      [dynamic_id]
+    );
 
-    if (!result) {
-      console.log('获取更新后的点赞数失败');
-      return res.status(500).json({ error: '获取点赞数失败' });
-    }
+    // 检查用户是否点赞
+    const [currentLike] = await mysqlService.query(checkLikeSql, [dynamic_id, user_id]);
 
     res.json({
       newLikeCount: result.like_count,
-      isLiked: action === 'like'
+      isLiked: !!currentLike
     });
   } catch (err) {
     console.error('点赞操作失败:', err);
@@ -314,7 +347,8 @@ router.get('/comments/:dynamicId', async (req, res) => {
         c.like_count,
         c.reply_count,
         c.parent_id,
-        u.name AS username
+        u.name AS username,
+        c.user_id
       FROM relic_comment c
       LEFT JOIN user u ON c.user_id = u.user_id
       WHERE c.relic_id = 0 
@@ -500,7 +534,8 @@ router.get('/comments/children/:parentId', async (req, res) => {
         c.like_count,
         c.reply_count,
         c.parent_id,
-        u.name AS username
+        u.name AS username,
+        c.user_id
       FROM relic_comment c
       LEFT JOIN user u ON c.user_id = u.user_id
       WHERE c.relic_id = 0 
@@ -514,6 +549,31 @@ router.get('/comments/children/:parentId', async (req, res) => {
     res.json(comments);
   } catch (err) {
     res.status(500).json({ error: '获取子评论失败', details: err.message || '未知错误' });
+  }
+});
+
+// 检查点赞状态接口
+router.get('/check-like/:dynamicId', async (req, res) => {
+  const { dynamicId } = req.params;
+  const { user_id } = req.query;
+
+  if (!user_id) {
+    return res.status(400).json({ error: '缺少用户ID' });
+  }
+
+  try {
+    const sql = `
+      SELECT 1 FROM comment_like 
+      WHERE comment_id = ? AND user_id = ?
+    `;
+    const [result] = await mysqlService.query(sql, [dynamicId, user_id]);
+    
+    res.json({
+      isLiked: !!result
+    });
+  } catch (err) {
+    console.error('检查点赞状态失败:', err);
+    res.status(500).json({ error: '检查点赞状态失败' });
   }
 });
 

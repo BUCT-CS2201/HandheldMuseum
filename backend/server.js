@@ -15,11 +15,21 @@ app.use(express.json())
 // 关键配置：暴露 uploads 目录为静态资源
 console.log('上传文件目录:', path.join(__dirname, 'comment_image')); // 添加这行
 app.use('/comment_image', express.static(path.join(__dirname, 'comment_image')));
+
+// console.log('上传文件目录:', path.join(__dirname, 'uploads/DynamicUploads')); // 添加这行
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // 挂载文物相关API
 app.use('/api/antique', antiqueRoutes)
 app.use('/api/museum', museumRoutes)
 app.use('/api/dynamic', dynamicRoutes)
 app.use('/api/user',userRoutes)
+
+console.log('静态资源目录:', path.join(__dirname, 'comment_image'));
+
+app.get('/testfile', (req, res) => {
+  res.sendFile(path.join(__dirname, 'comment_image', '6.png'));
+});
 
 app.listen(PORT, () => {
     console.log(`✅ 后端服务已启动: http://localhost:${PORT}`)

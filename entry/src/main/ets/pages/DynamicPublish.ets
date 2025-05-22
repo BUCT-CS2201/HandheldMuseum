@@ -42,7 +42,7 @@ struct DynamicPublish {
       // 内容编辑区
       Column() {
         Stack() {
-          TextInput({ placeholder: '分享你的发现...' })
+          TextArea({ placeholder: '分享你的发现...' })
             .height(150)
             .width('94%')
             .margin(10)
@@ -53,7 +53,7 @@ struct DynamicPublish {
             .placeholderColor('#999999')
             .caretColor('#007AFF')
             .onChange((value: string) => {
-              console.info('TextInput 内容变化:', value)
+              console.info('TextArea 内容变化:', value)
               this.showPlaceholder = value === ''
               this.content = value
               console.info('更新后的 content:', this.content)
@@ -226,7 +226,7 @@ struct DynamicPublish {
 
       // 1. 提交动态内容（使用与评论相同的接口）
       const httpRequest = http.createHttp();
-      const url = 'http://10.4.37.15:3000/api/antique/upload_comments/0'; // relicId 设为 0 表示动态
+      const url = 'http://10.4.69.110:3000/api/antique/upload_comments/0'; // relicId 设为 0 表示动态
       const response: FetchResult = await httpRequest.request(url, {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
@@ -270,7 +270,7 @@ struct DynamicPublish {
     }
 
     // 使用Python Flask接口上传图片
-    const uploadUrl: string = 'http://localhost:5000/upload_image';
+    const uploadUrl: string = 'http://10.4.69.110:5000/upload_image';
     const httpRequest: http.HttpRequest = http.createHttp();
 
     console.info('准备上传图片，selectedImages:', JSON.stringify(this.selectedImages));
