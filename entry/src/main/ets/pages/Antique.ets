@@ -12,6 +12,7 @@ interface AntiqueItem {
   id: number;
   name: string;
   image: string;
+  type: string;
   category: string;
   like_count: number;
   views_count: number;  // 添加浏览量字段
@@ -20,6 +21,10 @@ interface AntiqueItem {
 interface ResponseId {
   similar_ids: Array<number>;
   count: number;
+}
+
+interface LikeResponse {
+  like_count: number;
 }
 
 interface SearchResponse {
@@ -81,13 +86,14 @@ class AntiqueDataSource implements IDataSource {
 @Entry
 @Component
 export default struct Antique {
-  @State searchText: string = ''
+  @Prop searchText: string = ''
   @State selectedCategory: string = '全部'
   @State refreshKey: number = 0  // 新增强制刷新Key
   @State antiqueList: Array<AntiqueItem> = []
   @State filteredList: Array<AntiqueItem> = []
   @State isSearching: boolean = false
-  @State private dataSource: AntiqueDataSource = new AntiqueDataSource([])
+  @State dataSource: AntiqueDataSource = new AntiqueDataSource([])
+  @Prop showList: boolean = true
 
   private categories: Array<string> = ['全部', '唐', '宋', '元', '明', '清', '杂项']
   private categoryKeywordsMap: Record<string, Array<string>> = {
@@ -109,7 +115,7 @@ export default struct Antique {
   fetchData(): void {
     let httpRequest = http.createHttp()
     httpRequest.request(
-      `http://10.4.122.66:3000/api/antique/list?ts=${Date.now()}`,
+      `http://192.168.1.100:3000/api/antique/list?ts=${Date.now()}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         if (!err && data && typeof data.result === 'string') {
@@ -136,7 +142,10 @@ export default struct Antique {
   getFilteredList(): Array<AntiqueItem> {
     const search: string = this.searchText.trim().toLowerCase()
     const filteredList = this.antiqueList.filter(item => {
+      // 名称、种类、朝代都参与匹配
       const nameMatch: boolean = item.name.toLowerCase().includes(search)
+      const typeMatch: boolean = item.type?.toLowerCase().includes(search) ?? false
+      const categoryMatch: boolean = item.category.toLowerCase().includes(search)
 
       const isInCategory: boolean = (() => {
         if (this.selectedCategory === '全部') return true
@@ -151,7 +160,8 @@ export default struct Antique {
         return keywords.some(keyword => item.category.includes(keyword))
       })()
 
-      return nameMatch && isInCategory
+      // 只要三者有一个匹配就算通过
+      return (nameMatch || typeMatch || categoryMatch) && isInCategory
     })
 
     console.info(`[Antique] 过滤结果: 搜索="${search}", 分类="${this.selectedCategory}", 结果数量=${filteredList.length}`)
@@ -159,10 +169,15 @@ export default struct Antique {
   }
 
   private updateFilteredData(): void {
-    this.filteredList = this.getFilteredList()
-    this.dataSource.updateData(this.filteredList)
-    this.dataSource.notifyDataChange()
-    this.refreshKey += 1  // 在数据更新后增加refreshKey
+    if (!this.showList) return;
+    this.showList = false;
+    setTimeout(() => {
+      this.filteredList = this.getFilteredList();
+      this.dataSource.updateData(this.filteredList);
+      this.dataSource.notifyDataChange();
+      this.refreshKey += 1;
+      this.showList = true;
+    }, 0);
   }
   @State toastMessage: string = '';
   showToast(message: string) {
@@ -170,6 +185,46 @@ export default struct Antique {
     setTimeout(() => {
       prompt.showToast({ message: this.toastMessage });
     }, 0);
+  }
+
+  // 添加点赞处理函数
+  private handleLike(item: AntiqueItem): void {
+    // 1. 乐观更新：本地先+1，UI立即变化
+    item.like_count += 1
+    let httpRequest = http.createHttp()
+    httpRequest.request(
+      `http://192.168.1.100:3000/api/antique/like/${item.id}`,
+      { method: http.RequestMethod.POST },
+      (err, data) => {
+        let response: LikeResponse | null = null
+        if (!err && data) {
+          if (typeof data.result === 'string') {
+            // 新增：打印原始内容
+            console.log('点赞接口返回字符串:', data.result)
+            // 新增：判断是否为合法JSON
+            try {
+              const trimmed = data.result.trim()
+              if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                response = JSON.parse(data.result) as LikeResponse
+              } else {
+                console.error('点赞接口返回内容不是JSON:', data.result)
+              }
+            } catch (e) {
+              console.error('点赞接口返回内容不是合法JSON:', data.result)
+            }
+          } else if (typeof data.result === 'object') {
+            response = data.result as LikeResponse
+          }
+        }
+        if (response && typeof response.like_count === 'number') {
+          item.like_count = response.like_count
+        } else {
+          // 3. 请求失败，回滚本地+1
+          item.like_count -= 1
+          console.error('点赞请求失败，已回滚:', err)
+        }
+      }
+    )
   }
 
   private async updateViews(item: AntiqueItem): Promise<void> {
@@ -187,7 +242,7 @@ export default struct Antique {
 
       let httpRequest = http.createHttp();
       httpRequest.request(
-        `http://10.4.122.66:3000/api/antique/views/${item.id}`,
+        `http://192.168.1.100:3000/api/antique/views/${item.id}`,
         {
           method: http.RequestMethod.POST,
           header: { 'Content-Type': 'application/json' },
@@ -245,7 +300,7 @@ export default struct Antique {
         fs.closeSync(fileTemp);
         console.info('开始上传图片，图片URI:', imageUri_1);
 
-        const uploadUrl: string = 'http://10.4.122.66:5000/search_similar';
+        const uploadUrl: string = 'http://192.168.1.100:5000/search_similar';
         const response: http.HttpResponse = await httpRequest.request(uploadUrl, {
           method: http.RequestMethod.POST,
           header: {
@@ -326,7 +381,7 @@ export default struct Antique {
         // 输入框 + 搜索按钮组合
         Row() {
           TextInput({
-            placeholder: '搜索文物名称',
+            placeholder: '请输入内容',
             text: this.searchText
           })
             .onChange((value: string) => {
@@ -339,7 +394,10 @@ export default struct Antique {
             .layoutWeight(1)
 
           Button('搜索')
-            .onClick(() => this.updateFilteredData())
+            .onClick(() => {
+              this.showList=true
+              this.updateFilteredData()
+            })
             .fontSize(14)
             .margin({ left: 6, right: 0 })
             .backgroundColor('#DAA520')
@@ -400,62 +458,63 @@ export default struct Antique {
       .margin({ left: 1, right: 1, bottom: 10 })
 
       // 列表部分
-      List() {
-        LazyForEach(this.dataSource, (item: AntiqueItem) => {
-          ListItem() {
-            Column() {
-              Image(item.image)
-                .width('100%')
-                .height(120)
-                .borderRadius(8)
-                .objectFit(ImageFit.Cover)
-                .onClick(() => {
-                  this.updateViews(item)  // 点击时更新浏览量
-                  router.pushUrl({
-                    url: 'pages/AntiqueDetail',
-                    params: { id: item.id }
+      if (this.showList) {
+        List() {
+          LazyForEach(this.dataSource, (item: AntiqueItem) => {
+            ListItem() {
+              Column() {
+                Image(item.image)
+                  .width('100%')
+                  .height(120)
+                  .borderRadius(8)
+                  .objectFit(ImageFit.Cover)
+                  .onClick(() => {
+                    this.updateViews(item)  // 点击时更新浏览量
+                    router.pushUrl({
+                      url: 'pages/AntiqueDetail',
+                      params: { id: item.id }
+                    })
                   })
-                })
-              Text(item.name)
-                .fontSize(14)
-                .margin({ top: 8 })
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Row() {
-                Image($r('app.media.like'))
-                  .width(16)
-                  .height(16)
-                  .margin({ right: 4 })
-                Text(item.like_count.toString())
-                  .fontSize(12)
-                  .fontColor('#666666')
-                  .margin({ right: 12 })
-                Image($r('app.media.views'))  // 添加浏览量图标
-                  .width(16)
-                  .height(16)
-                  .margin({ right: 4 })
-                Text(item.views_count.toString())  // 显示浏览量
-                  .fontSize(12)
-                  .fontColor('#666666')
+                Text(item.name)
+                  .fontSize(14)
+                  .margin({ top: 8 })
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Row() {
+                  Image($r('app.media.like'))
+                    .width(16)
+                    .height(16)
+                    .margin({ right: 4 })
+                  Text(item.like_count.toString())
+                    .fontSize(12)
+                    .fontColor('#666666')
+                    .margin({ right: 12 })
+                  Image($r('app.media.views'))  // 添加浏览量图标
+                    .width(16)
+                    .height(16)
+                    .margin({ right: 4 })
+                  Text(item.views_count.toString())  // 显示浏览量
+                    .fontSize(12)
+                    .fontColor('#666666')
+                }
+                .width('100%')
+                .justifyContent(FlexAlign.Start)
+                .margin({ top: 4 })
               }
-              .backgroundColor(Color.Transparent)
               .width('100%')
-              .justifyContent(FlexAlign.Start)
-              .margin({ top: 4 })
+              .padding(10)
+              .backgroundColor('#FFFFFF')
+              .borderRadius(10)
+              .shadow({ radius: 3, color: '#cccccc', offsetX: 0, offsetY: 2 })
             }
-            .width('100%')
-            .padding(10)
-            .backgroundColor('#FFFFFF')
-            .borderRadius(10)
-            .shadow({ radius: 3, color: '#cccccc', offsetX: 0, offsetY: 2 })
-          }
-        }, (item: AntiqueItem) => item.id.toString())
+          }, (item: AntiqueItem) => item.id.toString())
+        }
+        .key(`antique-list-${this.refreshKey}`)  // 添加key以强制刷新List
+        .lanes(2)
+        .padding(16)
+        .cachedCount(6)
+        .flexGrow(1)
       }
-      .key(`antique-list-${this.refreshKey}`)  // 添加key以强制刷新List
-      .lanes(2)
-      .padding(16)
-      .cachedCount(6)
-      .flexGrow(1)
     }
     .width('100%')
     .height('100%')

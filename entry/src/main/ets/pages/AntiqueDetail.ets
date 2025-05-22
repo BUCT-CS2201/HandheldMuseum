@@ -10,7 +10,7 @@ import emitter from '@ohos.events.emitter';
 import { ImageItem } from '../common/types/DynamicTypes'
 import { matrix4 } from '@kit.ArkUI';
 
-const BACKEND_IMAGE_BASE = 'http://10.4.122.66:3000/comment_image/';
+const BACKEND_IMAGE_BASE = 'http://192.168.1.100:3000/comment_image/';
 
 // 路由参数类型
 interface RouterParams {
@@ -224,7 +224,7 @@ struct AntiqueDetail {
 
   fetchAntiqueDetail(id: number): void {
     const httpRequest = http.createHttp();
-    const url = `http://10.4.122.66:3000/api/antique/detail/${id}`;
+    const url = `http://192.168.1.100:3000/api/antique/detail/${id}`;
     console.log('请求的URL:', url);
 
     httpRequest.request(
@@ -296,6 +296,7 @@ struct AntiqueDetail {
           // 在获取详情成功后，调用状态检查函数
           this.checkLikeAndFavoriteStatus();
           this.checkCLikeStatus();
+          this.checkFavoriteStatus();
 
         } catch (e) {
           console.error('解析JSON失败:', e);
@@ -308,7 +309,7 @@ struct AntiqueDetail {
     const httpRequest = http.createHttp();
     const userId = await this.getUserId();
     console.log('当前userId:', userId);
-    const url = `http://10.4.122.66:3000/api/antique/comments/${id}?user_id=${userId}`;
+    const url = `http://192.168.1.100:3000/api/antique/comments/${id}?user_id=${userId}`;
     console.log('[fetchComments] 请求URL:', url);
 
     httpRequest.request(
@@ -441,7 +442,7 @@ struct AntiqueDetail {
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
     if (relicId > 0) {
       const httpRequest2 = http.createHttp();
-      const url = `http://10.4.122.66:3000/api/antique/upload_comments/${relicId}`;
+      const url = `http://192.168.1.100:3000/api/antique/upload_comments/${relicId}`;
       try {
         const response: FetchResult = await httpRequest2.request(url, {
           method: http.RequestMethod.POST,
@@ -486,7 +487,7 @@ struct AntiqueDetail {
       return; // 没有选择图片
     }
 
-    const uploadUrl: string = 'http://10.4.122.66:5000/upload_image'; // 假设这是上传图片的接口
+    const uploadUrl: string = 'http://192.168.1.100:5000/upload_image'; // 假设这是上传图片的接口
     const httpRequest: http.HttpRequest = http.createHttp();
 
     this.selectedImages.map( async (imageUri) => {
@@ -563,7 +564,7 @@ struct AntiqueDetail {
     let retryCount = 0;
     const tryLike = () => {
       let httpRequest = http.createHttp();
-      const url = 'http://10.4.122.66:3000/api/antique/comments/like/' + this.comment.comment_id;
+      const url = 'http://192.168.1.100:3000/api/antique/comments/like/' + this.comment.comment_id;
       httpRequest.request(
         url,
         {
@@ -656,7 +657,7 @@ struct AntiqueDetail {
     this.getUserId().then((userId: number) => {
       const httpRequest = http.createHttp();
       httpRequest.request(
-        `http://10.4.122.66:3000/api/antique/cstatus/${this.comment.comment_id}?user_id=${userId}`,
+        `http://192.168.1.100:3000/api/antique/cstatus/${this.comment.comment_id}?user_id=${userId}`,
         { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
         (err: Error | undefined, data: FetchResult) => {
           if (err) {
@@ -732,7 +733,7 @@ struct AntiqueDetail {
       console.info(`[like]开始第${retryCount + 1}次点赞请求，用户ID: ${userId}, 文物ID: ${this.antique.relic_id}`);
 
       // 使用更可靠的服务器地址 (根据浏览量功能确认可达)
-      const serverUrl = 'http://10.4.122.66:3000/api/antique/like/' + this.antique.relic_id;
+      const serverUrl = 'http://localhost:3000/api/antique/like/' + this.antique.relic_id;
       console.info('[like]请求URL:', serverUrl);
 
       httpRequest.request(
@@ -859,7 +860,7 @@ struct AntiqueDetail {
       console.info(`[favorite]开始第${retryCount + 1}次收藏请求，用户ID: ${userId}, 文物ID: ${this.antique.relic_id}`);
 
       // 使用更可靠的服务器地址 (根据浏览量功能确认可达)
-      const serverUrl = 'http://10.4.122.66:3000/api/antique/favorite/' + this.antique.relic_id;
+      const serverUrl = 'http://192.168.1.100:3000/api/antique/favorite/' + this.antique.relic_id;
       console.info('[favorite]请求URL:', serverUrl);
 
       httpRequest.request(
@@ -954,7 +955,7 @@ struct AntiqueDetail {
       // 使用this.antique.relic_id 构建URL，确保和likeAntique使用一致的ID
       // userId即使为0也会发送给后端
       httpRequest.request(
-        `http://10.4.122.66:3000/api/antique/status/${this.antique.relic_id}?user_id=${userId}`,
+        `http://192.168.1.100:3000/api/antique/status/${this.antique.relic_id}?user_id=${userId}`,
         { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
         (err: Error | undefined, data: FetchResult) => {
           if (err) {
@@ -1008,7 +1009,7 @@ struct AntiqueDetail {
       // 使用this.antique.relic_id 构建URL，确保和likeAntique使用一致的ID
       // userId即使为0也会发送给后端
       httpRequest.request(
-        `http://10.4.122.66:3000/api/antique/fstatus/${this.antique.relic_id}?user_id=${userId}`,
+        `http://192.168.1.100:3000/api/antique/fstatus/${this.antique.relic_id}?user_id=${userId}`,
         { method: http.RequestMethod.GET, expectDataType: http.HttpDataType.OBJECT },
         (err: Error | undefined, data: FetchResult) => {
           if (err) {

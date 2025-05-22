@@ -11,7 +11,8 @@ router.get('/list', (req, res) => {
         SELECT 
             c.relic_id AS id, 
             c.name AS name, 
-            i.img_url AS image, 
+            i.img_url AS image,
+            c.type AS type,
             c.dynasty AS category, 
             c.likes_count AS like_count,
             c.views_count AS views_count
@@ -430,9 +431,13 @@ router.post('/views/:id', async (req, res) => {
         }
         const museum_id = museumResult[0].museum_id;
 
+        // 2. 更新文物浏览量
+        const updateViewsSql = 'UPDATE cultural_relic SET views_count = views_count + 1 WHERE relic_id = ?';
+        await mysqlService.query(updateViewsSql, [id]);
+
         // 2. 检查用户是否浏览过该文物
         const checkHistorySql = `
-            SELECT id FROM user_browsing_history 
+            SELECT id FROM user_browsing_history
             WHERE user_id = ? AND relic_id = ?
         `;
         const historyResult = await mysqlService.query(checkHistorySql, [user_id, id]);
@@ -440,16 +445,13 @@ router.post('/views/:id', async (req, res) => {
         if (historyResult.length > 0) {
             // 如果浏览过，只更新浏览时间
             const updateTimeSql = `
-                UPDATE user_browsing_history 
-                SET browse_time = NOW() 
+                UPDATE user_browsing_history
+                SET browse_time = NOW()
                 WHERE id = ?
             `;
             await mysqlService.query(updateTimeSql, [historyResult[0].id]);
         } else {
-            // 如果未浏览过，更新文物浏览量并插入新记录
-            const updateViewsSql = 'UPDATE cultural_relic SET views_count = views_count + 1 WHERE relic_id = ?';
-            await mysqlService.query(updateViewsSql, [id]);
-
+            // 如果未浏览过，插入新记录
             const insertHistorySql = `
                 INSERT INTO user_browsing_history (user_id, relic_id, museum_id, browse_time)
                 VALUES (?, ?, ?, NOW())
@@ -467,6 +469,7 @@ router.post('/views/:id', async (req, res) => {
         res.status(500).json({ error: '数据库操作失败' });
     }
 });
+
 
 // 获取文物浏览量
 router.get('/views/:id', async (req, res) => {
