@@ -21,12 +21,6 @@ interface UserInfo {
   update_time: string;
 }
 
-interface ApiResponse<T> {
-  code: number;
-  message: string;
-  data?: T;
-}
-
 @Entry
 @Component
 export default struct Personal {
@@ -135,16 +129,18 @@ export default struct Personal {
         // 功能列表
         List() {
           ListItem() {
-            this.MenuItem('我的收藏', $r('app.media.favorite'))
+            this.MenuItem('我的收藏', $r('app.media.favorite'),()=>{
+              router.pushUrl({ url: 'pages/Favorite'});
+            })
           }
           ListItem() {
             this.MenuItem('浏览历史', $r('app.media.history'),()=>{
               router.pushUrl({ url: 'pages/BrowsingHistory'});
             })
           }
-          ListItem() {
-            this.MenuItem('消息通知', $r('app.media.notification'))
-          }
+          // ListItem() {
+          //   this.MenuItem('消息通知', $r('app.media.notification'))
+          // }
           ListItem() {
             this.MenuItem('设置', $r('app.media.settings'), () => {
               router.pushUrl({ url: 'pages/Settings' });

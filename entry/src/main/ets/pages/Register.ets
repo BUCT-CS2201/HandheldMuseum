@@ -5,7 +5,7 @@ import type { BusinessError } from '@ohos.base';
 import promptAction from '@ohos.promptAction';
 
 // 服务器配置
-const SERVER_URL = 'http://10.4.59.157:3000';
+const SERVER_URL = 'http://10.4.117.113:3000';
 
 interface RegisterData {
   user_id: number;
@@ -24,10 +24,21 @@ struct Register {
   @State password: string = '';
   @State confirmPassword: string = '';
   @State name: string = '';
-  @State idNumber: string = '';
   @State message: string = '';
   @State isLoading: boolean = false;
   private userPreferences: preferences.Preferences | null = null;
+
+  // 验证手机号格式
+  private validatePhoneNumber(phone: string): boolean {
+    // 使用正则表达式验证11位数字
+    const phoneRegex = /^1\d{10}$/;
+    return phoneRegex.test(phone);
+  }
+
+  // 验证密码长度
+  private validatePasswordLength(password: string): boolean {
+    return password.length >= 6 && password.length <= 18;
+  }
 
   aboutToAppear() {
     this.initPreferences();
@@ -77,18 +88,18 @@ struct Register {
           .margin({ top: 32 })
           .onChange((value: string) => {
             this.phoneNumber = value;
+            // 实时验证手机号格式
+            if (value && !this.validatePhoneNumber(value)) {
+              this.message = '请输入11位手机号码';
+            } else {
+              this.message = '';
+            }
           })
 
         TextInput({ placeholder: '请输入昵称' })
           .margin({ top: 16 })
           .onChange((value: string) => {
             this.name = value;
-          })
-
-        TextInput({ placeholder: '请输入身份证号' })
-          .margin({ top: 16 })
-          .onChange((value: string) => {
-            this.idNumber = value;
           })
 
         TextInput({ placeholder: '请输入密码' })
@@ -152,8 +163,20 @@ struct Register {
 
   async handleRegister(): Promise<boolean> {
     // 表单验证
-    if (!this.phoneNumber || !this.password || !this.confirmPassword || !this.name || !this.idNumber) {
+    if (!this.phoneNumber || !this.password || !this.confirmPassword || !this.name) {
       this.message = '请填写完整信息';
+      return false;
+    }
+
+    // 验证手机号格式
+    if (!this.validatePhoneNumber(this.phoneNumber)) {
+      this.message = '请输入11位手机号码';
+      return false;
+    }
+
+    // 验证密码长度
+    if (!this.validatePasswordLength(this.password)) {
+      this.message = '密码长度应为6-18位';
       return false;
     }
 
@@ -186,8 +209,7 @@ struct Register {
             extraData: JSON.stringify({
               phone_number: this.phoneNumber,
               password: this.password,
-              name: this.name,
-              id_number: this.idNumber
+              name: this.name
             }),
             connectTimeout: 60000,
             readTimeout: 60000

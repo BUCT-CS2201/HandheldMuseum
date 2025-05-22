@@ -7,6 +7,23 @@ function md5Encrypt(password) {
     return crypto.createHash('md5').update(password).digest('hex');
 }
 
+// 验证手机号格式
+function validatePhoneNumber(phone) {
+    const phoneRegex = /^1\d{10}$/;
+    return phoneRegex.test(phone);
+}
+
+// 验证密码长度
+function validatePasswordLength(password) {
+    return password.length >= 6 && password.length <= 18;
+}
+
+// 验证身份证号格式
+function validateIdNumber(idNumber) {
+    const idNumberRegex = /^\d{18}$/;
+    return idNumberRegex.test(idNumber);
+}
+
 // 用户登录
 router.post('/login', async (req, res) => {
     try {
@@ -49,13 +66,31 @@ router.post('/login', async (req, res) => {
 router.post('/register', async (req, res) => {
     try {
         console.log('收到注册请求:', req.body);
-        const { phone_number, password, name, id_number } = req.body;
+        const { phone_number, password, name } = req.body;
         
-        if (!phone_number || !password || !name || !id_number) {
-            console.log('注册信息不完整:', { phone_number, name, id_number });
+        if (!phone_number || !password || !name) {
+            console.log('注册信息不完整:', { phone_number, name });
             return res.status(400).json({
                 code: 1,
                 message: '请填写完整信息'
+            });
+        }
+
+        // 验证手机号格式
+        if (!validatePhoneNumber(phone_number)) {
+            console.log('手机号格式不正确:', phone_number);
+            return res.json({
+                code: 1,
+                message: '请输入11位手机号码'
+            });
+        }
+
+        // 验证密码长度
+        if (!validatePasswordLength(password)) {
+            console.log('密码长度不正确:', password.length);
+            return res.json({
+                code: 1,
+                message: '密码长度应为6-18位'
             });
         }
 
@@ -71,8 +106,8 @@ router.post('/register', async (req, res) => {
 
         // 对密码进行 MD5 加密
         const encryptedPassword = md5Encrypt(password);
-        console.log('准备注册用户:', { phone_number, name, id_number });
-        const result = await mysqlService.userRegister(phone_number, encryptedPassword, name, id_number);
+        console.log('准备注册用户:', { phone_number, name });
+        const result = await mysqlService.userRegister(phone_number, encryptedPassword, name);
         
         if (result) {
             console.log('注册成功:', result);
@@ -138,7 +173,7 @@ router.get('/info/:userId', async (req, res) => {
 router.put('/info/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
-        const { name, phone_number, gender, age, description, address, wechat, qq } = req.body;
+        const { name, phone_number, id_number, gender, age, description, address, wechat, qq } = req.body;
         
         if (!userId) {
             return res.status(400).json({
@@ -147,9 +182,18 @@ router.put('/info/:userId', async (req, res) => {
             });
         }
 
+        // 验证身份证号格式
+        if (id_number && !validateIdNumber(id_number)) {
+            return res.json({
+                code: 1,
+                message: '请输入18位身份证号码'
+            });
+        }
+
         const result = await mysqlService.updateUserInfo(userId, {
             name,
             phone_number,
+            id_number,
             gender,
             age,
             description,

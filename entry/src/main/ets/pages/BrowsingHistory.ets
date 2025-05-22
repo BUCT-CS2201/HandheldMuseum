@@ -49,7 +49,7 @@ struct BrowsingHistory {
     console.info('[BrowsingHistory] fetchHistory 调用，userId:', userId);
     let httpRequest = http.createHttp();
     httpRequest.request(
-      `http://10.4.37.15:3000/api/antique/history/${userId}`,
+      `http://10.4.52.124:3000/api/antique/history/${userId}`,
       { method: http.RequestMethod.GET },
       (err, data) => {
         console.info('[BrowsingHistory] HTTP 请求回调触发');

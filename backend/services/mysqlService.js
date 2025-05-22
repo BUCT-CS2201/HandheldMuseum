@@ -68,21 +68,21 @@ const mysqlService = {
         return results[0].count > 0
     },
 
-    userRegister: async (phone_number, password, name, id_number) => {
-        const sql = 'INSERT INTO user (phone_number, password, name, id_number, account_status, comment_status, role_type) VALUES (?, ?, ?, ?, 1, 1, 0)'
-        const results = await mysqlService.query(sql, [phone_number, password, name, id_number])
+    userRegister: async (phone_number, password, name) => {
+        const sql = 'INSERT INTO user (phone_number, password, name, id_number, account_status, comment_status, role_type) VALUES (?, ?, ?, 0, 1, 1, 0)'
+        const results = await mysqlService.query(sql, [phone_number, password, name])
         return results
     },
 
     getUserInfo: async (userId) => {
-        const sql = 'SELECT user_id, phone_number, name, description, gender, age, address, wechat, qq, account_status, comment_status, role_type, create_time, update_time FROM user WHERE user_id = ?'
+        const sql = 'SELECT user_id, phone_number, name, description, gender, age, address, wechat, qq, account_status, comment_status, role_type, create_time, update_time, id_number FROM user WHERE user_id = ?'
         const results = await mysqlService.query(sql, [userId])
         return results[0] || null
     },
 
-    updateUserInfo: async (userId, { name, phone_number, gender, age, description, address, wechat, qq }) => {
-        const sql = 'UPDATE user SET name = ?, phone_number = ?, gender = ?, age = ?, description = ?, address = ?, wechat = ?, qq = ? WHERE user_id = ?'
-        const result = await mysqlService.query(sql, [name, phone_number, gender, age, description, address, wechat, qq, userId])
+    updateUserInfo: async (userId, { name, phone_number, id_number, gender, age, description, address, wechat, qq }) => {
+        const sql = 'UPDATE user SET name = ?, phone_number = ?, id_number = ?, gender = ?, age = ?, description = ?, address = ?, wechat = ?, qq = ? WHERE user_id = ?'
+        const result = await mysqlService.query(sql, [name, phone_number, id_number, gender, age, description, address, wechat, qq, userId])
         return result.affectedRows > 0
     }
 }

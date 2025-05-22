@@ -430,18 +430,34 @@ router.post('/views/:id', async (req, res) => {
         }
         const museum_id = museumResult[0].museum_id;
 
-        // 2. 更新文物浏览量
-        const updateViewsSql = 'UPDATE cultural_relic SET views_count = views_count + 1 WHERE relic_id = ?';
-        await mysqlService.query(updateViewsSql, [id]);
-
-        // 3. 记录用户浏览历史
-        const insertHistorySql = `
-            INSERT INTO user_browsing_history (user_id, relic_id, museum_id, browse_time)
-            VALUES (?, ?, ?, NOW())
+        // 2. 检查用户是否浏览过该文物
+        const checkHistorySql = `
+            SELECT id FROM user_browsing_history 
+            WHERE user_id = ? AND relic_id = ?
         `;
-        await mysqlService.query(insertHistorySql, [user_id, id, museum_id]);
+        const historyResult = await mysqlService.query(checkHistorySql, [user_id, id]);
 
-        // 4. 获取更新后的浏览量
+        if (historyResult.length > 0) {
+            // 如果浏览过，只更新浏览时间
+            const updateTimeSql = `
+                UPDATE user_browsing_history 
+                SET browse_time = NOW() 
+                WHERE id = ?
+            `;
+            await mysqlService.query(updateTimeSql, [historyResult[0].id]);
+        } else {
+            // 如果未浏览过，更新文物浏览量并插入新记录
+            const updateViewsSql = 'UPDATE cultural_relic SET views_count = views_count + 1 WHERE relic_id = ?';
+            await mysqlService.query(updateViewsSql, [id]);
+
+            const insertHistorySql = `
+                INSERT INTO user_browsing_history (user_id, relic_id, museum_id, browse_time)
+                VALUES (?, ?, ?, NOW())
+            `;
+            await mysqlService.query(insertHistorySql, [user_id, id, museum_id]);
+        }
+
+        // 3. 获取更新后的浏览量
         const getViewsSql = 'SELECT views_count FROM cultural_relic WHERE relic_id = ?';
         const results = await mysqlService.query(getViewsSql, [id]);
 
@@ -519,6 +535,39 @@ router.post('/upload_images', async (req, res) => {
     //     return res.status(400).json({ error: '没有上传图片' });
     // }
 
+});
+
+// 获取用户收藏记录
+router.get('/favorites/:user_id', async (req, res) => {
+    const user_id = req.params.user_id;
+    try {
+        const sql = `
+            SELECT f.relic_id, c.name, i.img_url, f.create_time
+            FROM user_favorite f
+            JOIN cultural_relic c ON c.relic_id = f.relic_id
+            JOIN relic_image i ON c.relic_id = i.relic_id
+            WHERE f.user_id = ? AND f.favorite_type = 1
+            ORDER BY f.create_time DESC
+        `;
+        const results = await mysqlService.query(sql, [user_id]);
+
+        if (results.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        // 格式化结果数组
+        const formatted = results.map(row => ({
+            id: row.relic_id,
+            name: row.name,
+            imageUrl: row.img_url,
+            createTime: row.create_time
+        }));
+
+        res.json(formatted);
+    } catch (err) {
+        console.error('获取收藏记录失败:', err);
+        res.status(500).json({ error: '数据库查询失败' });
+    }
 });
 
 module.exports = router
