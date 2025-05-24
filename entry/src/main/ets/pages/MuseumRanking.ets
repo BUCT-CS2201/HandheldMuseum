@@ -23,7 +23,7 @@ struct MuseumRanking {
   fetchMuseumRanking() {
     let httpRequest = http.createHttp();
     httpRequest.request(
-      'http://10.4.37.15:3000/api/museum/ranking',
+      'http://10.4.11.183:3000/api/museum/ranking',
       {
         method: http.RequestMethod.GET,
       },
