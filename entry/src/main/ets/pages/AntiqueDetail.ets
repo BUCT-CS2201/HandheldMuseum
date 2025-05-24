@@ -1,11 +1,12 @@
 import http from '@ohos.net.http';
 import router from '@ohos.router';
 import prompt from '@ohos.prompt';
+import common from '@ohos.app.ability.common';
 import { UserStore } from '../common/UserStore';
 import preferences from '@ohos.data.preferences';
 import picker from '@ohos.file.picker'
 import fs from '@ohos.file.fs'
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError } from '@kit.BasicServicesKit'; 
 import emitter from '@ohos.events.emitter';
 import { ImageItem } from '../common/types/DynamicTypes'
 import { matrix4 } from '@kit.ArkUI';
@@ -169,7 +170,8 @@ struct AntiqueDetail {
   };
   @State commentTree: CommentTreeItem[] = [];
   @State commentContent: string = '';
-  @State replyParentId: number | null = null;
+  @Prop replyParentId: number | null = null;
+  @State replyname : string = '' ;
   @State toastMessage: string = '';
   @State likeCount: number = 0;
   @State isLiked: boolean = false;
@@ -327,24 +329,27 @@ struct AntiqueDetail {
         let commentArr: CommentItem[] = [];
         if (typeof data.result === 'string') {
           try {
-             commentArr = JSON.parse(data.result) as CommentItem[];
-             console.log('[fetchComments] 解析后的评论数组:', JSON.stringify(commentArr));
+            commentArr = JSON.parse(data.result) as CommentItem[];
+            console.log('[fetchComments] 解析后的评论数组:', JSON.stringify(commentArr));
           } catch(e) {
             console.error('[fetchComments]解析评论列表 JSON 失败:', e);
             return;
           }
         } else if (typeof data.result === 'object') {
-           if (Array.isArray(data.result)) {
-             commentArr = data.result as CommentItem[];
-             console.log('[fetchComments] 直接获取到的评论数组:', JSON.stringify(commentArr));
-           } else {
-             console.error('[fetchComments]评论接口返回数据结构异常，不是数组:', data.result);
-             return;
-           }
+          if (Array.isArray(data.result)) {
+            commentArr = data.result as CommentItem[];
+            console.log('[fetchComments] 直接获取到的评论数组:', JSON.stringify(commentArr));
+          } else {
+            console.error('[fetchComments]评论接口返回数据结构异常，不是数组:', data.result);
+            return;
+          }
         } else {
-           console.error('[fetchComments]评论接口返回未知数据类型:', typeof data.result);
-           return;
+          console.error('[fetchComments]评论接口返回未知数据类型:', typeof data.result);
+          return;
         }
+
+        // 添加调试日志
+        console.log('解析后的评论数组:', commentArr);
 
         // 检查每个评论的 is_liked 状态
         console.log('[fetchComments] 评论点赞状态检查:');
@@ -422,7 +427,15 @@ struct AntiqueDetail {
 
   // 修改回复按钮点击处理函数
   handleReplyClick(comment: CommentItem) {
-    this.replyParentId = comment.comment_id;
+    if( this.replyParentId === comment.comment_id ) {
+      this.replyParentId = null ;
+    }
+    else {
+      this.replyParentId = comment.comment_id;
+      this.replyname = comment.user_name ;
+    }
+
+
   }
 
   // 修改提交评论函数
@@ -440,7 +453,7 @@ struct AntiqueDetail {
 
     const params = router.getParams() as RouterParams;
     const relicId: number = params?.id ? parseInt(params.id.toString()) : 0;
-    if (relicId > 0) {
+    if (relicId > 0 && this.commentContent) {
       const httpRequest2 = http.createHttp();
       const url = `http://192.168.1.100:3000/api/antique/upload_comments/${relicId}`;
       try {
@@ -451,7 +464,7 @@ struct AntiqueDetail {
           extraData: JSON.stringify({
             user_id: userId,
             content: this.commentContent,
-            parent_id: this.replyParentId
+            parent_id: this.replyParentId || null
           })
         }) as FetchResult;
 
@@ -1054,11 +1067,12 @@ struct AntiqueDetail {
   }
 
   build() {
-    Stack() {
-      Stack() {
-        Column() {
-          // 返回按钮
-          Row() {
+    Column() {
+
+      List({ space: 20 }) {
+        //返回按钮
+        ListItem() {
+          Row(){
             Image($r('app.media.ic_back'))
               .width(24)
               .height(24)
@@ -1067,385 +1081,354 @@ struct AntiqueDetail {
                 router.back();
               })
             Text('文物详情')
-              .fontSize(20)
-              .fontWeight(FontWeight.Medium)
+              .fontSize(22)
+              .fontWeight(FontWeight.Bold)
               .margin({ left: 16 })
+              .fontColor('#333');
           }
-          .width('100%')
-          .height(56)
-          .backgroundColor('#FFFFFF')
-
-          Scroll() {
-            Column() {
-              // 图片和视频区域
-              if (this.antique.images.length > 0 || this.antique.videos.length > 0) {
-                Scroll() {
-                  Row() {
-                    // 显示所有图片
-                    ForEach(this.antique.images, (img: string) => {
-                      Image(img)
-                        .width(250)
-                        .height(180)
-                        .margin({ left: 10, right: 10 })
-                        .objectFit(ImageFit.Cover)
-                        .borderRadius(10);
-                    }, (img: string) => img);
-
-                    // 显示所有视频
-                    ForEach(this.antique.videos, (video: string) => {
-                      Video({ src: video })
-                        .width(250)
-                        .height(180)
-                        .margin({ left: 10, right: 10 })
-                        .borderRadius(10)
-                        .muted(true)
-                        .autoPlay(false)
-                        .controls(true);
-                    }, (video: string) => video);
-                  }
-                  .padding({ bottom: 4 });
-                }
-                .scrollable(ScrollDirection.Horizontal)
-                .width('100%');
-              }
-
-              // 信息区
-              Column() {
-                // 文物名称（居中显示）
-                Text(this.antique.name)
-                  .fontSize(20)
-                  .fontWeight(FontWeight.Bold)
-                  .margin({ top: 16, bottom: 12 })
+        }
+        .padding({ bottom: 4 });
+        //图片显示区域
+        ListItem() {
+          if (this.antique.images.length > 0 || this.antique.videos.length > 0) {
+            Row() {
+              // 显示所有图片
+              ForEach(this.antique.images, (img: string) => {
+                Image(img)
                   .width('100%')
-                  .textAlign(TextAlign.Center)
+                  .height('100%')
+                  .margin({ left: 10, right: 10 })
+                  .objectFit(ImageFit.Contain)
+                  .borderRadius(12);
+              }, (img: string) => img);
 
-                // 信息项容器（白色卡片）
-                Column() {
-                  // 类型
-                  Row() {
-                    Text('类型：')
-                      .fontSize(14)
-                      .width(90)
-                      .textAlign(TextAlign.End)
-                    Text(this.antique.type || '未知类型')
-                      .fontSize(14)
-                      .fontColor('#666666')
-                      .flexGrow(1)
-                      .flexShrink(1)// 允许收缩
-                      .textAlign(TextAlign.Start)
-                      .margin({ left: 8 })
-                  }
-                  .margin({ bottom: 10 })
-                  .width('100%')
+              // 显示所有视频
+              ForEach(this.antique.videos, (video: string) => {
+                Video({ src: video })
+                  .width(250)
+                  .height(180)
+                  .margin({ left: 10, right: 10 })
+                  .borderRadius(12)
+                  .muted(true)
+                  .autoPlay(false)
+                  .controls(true);
+              }, (video: string) => video);
+            }
+            .width('100%')
+            .padding({ bottom: 4 });
+          }
+        }
+        .backgroundColor('#F7F8FA')
+        .width('100%')
+        .height(200)
+        //文物详情显示区域
+        ListItem() {
+          Column() {
+            //类型
+            Row() {
+              Text('类型：')
+                .fontSize(16)
+                .width(90)
+                .textAlign(TextAlign.End)
+              Text(this.antique.type || '未知类型')
+                .fontSize(16)
+                .fontColor('#666666')
+                .flexGrow(1)
+                .flexShrink(1)// 允许收缩
+                .textAlign(TextAlign.Start)
+                .margin({ left: 8 })
+            }
+            .margin({ bottom: 10 })
+            .width('100%')
 
-                  // 尺寸
-                  Row() {
-                    Text('尺寸：')
-                      .fontSize(14)
-                      .width(90)
-                      .textAlign(TextAlign.End)
-                    Text(this.antique.size || '未知尺寸')
-                      .fontSize(14)
-                      .fontColor('#666666')
-                      .flexGrow(1)
-                      .flexShrink(1)// 允许收缩
-                      .textAlign(TextAlign.Start)
-                      .margin({ left: 8 })
-                  }
-                  .margin({ bottom: 10 })
-                  .width('100%')
+            // 尺寸
+            Row() {
+              Text('尺寸：')
+                .fontSize(16)
+                .width(90)
+                .textAlign(TextAlign.End)
+              Text(this.antique.size || '未知尺寸')
+                .fontSize(16)
+                .fontColor('#666666')
+                .flexGrow(1)
+                .flexShrink(1)// 允许收缩
+                .textAlign(TextAlign.Start)
+                .margin({ left: 8 })
+            }
+            .margin({ bottom: 10 })
+            .width('100%')
 
-                  // 材料
-                  Row() {
-                    Text('材料：')
-                      .fontSize(14)
-                      .width(90)
-                      .textAlign(TextAlign.End)
-                    Text(this.antique.materials || '未知材料')
-                      .fontSize(14)
-                      .fontColor('#666666')
-                      .flexGrow(1)
-                      .flexShrink(1)// 允许收缩
-                      .textAlign(TextAlign.Start)
-                      .margin({ left: 8 })
-                  }
-                  .margin({ bottom: 10 })
-                  .width('100%')
+            // 材料
+            Row() {
+              Text('材料：')
+                .fontSize(16)
+                .width(90)
+                .textAlign(TextAlign.End)
+              Text(this.antique.materials || '未知材料')
+                .fontSize(16)
+                .fontColor('#666666')
+                .flexGrow(1)
+                .flexShrink(1)// 允许收缩
+                .textAlign(TextAlign.Start)
+                .margin({ left: 8 })
+            }
+            .margin({ bottom: 10 })
+            .width('100%')
 
-                  // 朝代
-                  Row() {
-                    Text('朝代：')
-                      .fontSize(14)
-                      .width(90)
-                      .textAlign(TextAlign.End)
-                    Text(this.antique.dynasty || '未知朝代')
-                      .fontSize(14)
-                      .fontColor('#666666')
-                      .flexGrow(1)
-                      .flexShrink(1)// 允许收缩
-                      .textAlign(TextAlign.Start)
-                      .margin({ left: 8 })
-                  }
-                  .margin({ bottom: 10 })
-                  .width('100%')
+            // 朝代
+            Row() {
+              Text('朝代：')
+                .fontSize(16)
+                .width(90)
+                .textAlign(TextAlign.End)
+              Text(this.antique.dynasty || '未知朝代')
+                .fontSize(16)
+                .fontColor('#666666')
+                .flexGrow(1)
+                .flexShrink(1)// 允许收缩
+                .textAlign(TextAlign.Start)
+                .margin({ left: 8 })
+            }
+            .margin({ bottom: 10 })
+            .width('100%')
 
-                  // 作者
-                  Row() {
-                    Text('作者：')
-                      .fontSize(14)
-                      .width(90)
-                      .textAlign(TextAlign.End)
-                    Text(this.antique.author || '未知作者')
-                      .fontSize(14)
-                      .fontColor('#666666')
-                      .flexGrow(1)
-                      .flexShrink(1)
-                      .textAlign(TextAlign.Start)
-                      .margin({ left: 8 })
-                  }
-                  .margin({ bottom: 10 })
-                  .width('100%')
-                }
-                .width('100%')
-                .padding({
-                  left: 12,
-                  right: 16,
-                  top: 16,
-                  bottom: 16
-                })
-                .backgroundColor('#FFFFFF')
-                .borderRadius(12)
-                .margin({ bottom: 16, left: 12, right: 12 })
+            // 作者
+            Row() {
+              Text('作者：')
+                .fontSize(16)
+                .width(90)
+                .textAlign(TextAlign.End)
+              Text(this.antique.author || '未知作者')
+                .fontSize(16)
+                .fontColor('#666666')
+                .flexGrow(1)
+                .flexShrink(1)
+                .textAlign(TextAlign.Start)
+                .margin({ left: 8 })
+            }
+            .margin({ bottom: 10 })
+            .width('100%')
 
-                // 文物简介
-                Column() {
-                  Text('文物简介')
-                    .fontSize(18)
-                    .fontWeight(FontWeight.Medium)
-                    .margin({ bottom: 8 })
-                    .width('100%')
-
-                  Text(this.antique.description || '暂无描述信息')
-                    .fontSize(12)
-                    .lineHeight(20)
-                    .fontColor('#444444')
-                    .width('100%')
-                }
-                .width('100%')
-                .padding(12)
-                .backgroundColor('#FFFFFF')
-                .borderRadius(10)
-              }
+            //文物简介
+            Text('文物简介')
+              .fontSize(20)
+              .fontWeight(FontWeight.Bold)
               .width('100%')
-              .padding(10)
-              .backgroundColor('#FFFFFF')
-              .borderRadius(10)
-              .margin({
-                top: 10,
-                bottom: 20,
-                left: 10,
-                right: 10
-              })
+              .margin({ left: 8 })
 
-              // 评论区域
-              Scroll() {
-                Column() {
-                  Text('评论')
-                    .fontSize(20)
-                    .fontWeight(FontWeight.Bold)
-                    .margin({ top: 12, left: 0, bottom: 8 })
-                    .fontColor('#333333');
+            Text( "       " + this.antique.description || '暂无描述信息')
+              .fontSize(14)
+              .lineHeight(22)
+              .fontColor('#444444')
+              .width('100%')
+              .margin({ left: 8 })
+          }
+        }
+        //评论区域
+        ListItem() {
+          Column() {
+            Text('评论')
+              .fontSize(22)
+              .fontWeight(FontWeight.Bold)
+              .margin({ top: 12, left: 0, bottom: 8 })
+              .fontColor('#333333')
 
-                  // 评论列表容器
+            List() {
+
+              ForEach( this.commentTree , ( item : CommentTreeItem) => {
+                ListItem(){
+
                   Column() {
-                    ForEach(this.commentTree, (item: CommentTreeItem) => {
-                      // 父评论
-                      Row() {
-                        // 头像
-                        Image($r('app.media.avatar_default'))
-                          .width(32)
-                          .height(32)
-                          .borderRadius(18)
-                          .backgroundColor('#FFF')
-                          .margin({
-                            right: 0,
-                            left: 0,
-                            top: 0,
-                            bottom: 0
-                          })
-                        // 内容区
-                        Column() {
-                          Row() {
-                            Text(item.comment.user_name)
-                              .fontWeight(FontWeight.Bold)
-                              .fontSize(15)
-                              .fontColor('#007BFF')
-                            Text(item.comment.create_time.split('T')[0])
-                              .fontSize(11)
-                              .fontColor('#999')
-                              .margin({ left: 8 })
-                          }
-                          //图片展示
-                          Grid() {
-                            ForEach( item.comment.images, (img: string) => {
-                              GridItem() {
-                                Image( BACKEND_IMAGE_BASE + img )
-                                  .width('100%')
-                                  .aspectRatio(1)
-                                  .objectFit(ImageFit.Cover)
-                                  .borderRadius(12)
-                                  .transform(this.matrix)
-                              }
-                            })
-                          }
-                          .columnsTemplate('1fr 1fr 1fr')
-                          .rowsGap(8)
-                          .columnsGap(8)
-                          .margin({ bottom: 16 })
-                          .align(Alignment.Start)
-                          Text(item.comment.content)
-                            .fontSize(14)
-                            .fontColor('#222')
-                            .margin({ top: 2, bottom: 2, left: 0 })
-                            .textAlign(TextAlign.Start)
-                            .align(Alignment.Start)
+                    //头像名称区域
+                    Row() {
+                      // 头像
+                      Image($r('app.media.avatar_default'))
+                        .width(36)
+                        .height(36)
+                        .borderRadius(18)
+                        .backgroundColor('#FFF')
+                        .margin({
+                          right: 0,
+                          left: 0,
+                          top: 0,
+                          bottom: 0
+                        })
+
+                      // 名称
+                      Text(item.comment.user_name)
+                        .fontWeight(FontWeight.Bold)
+                        .fontSize(16)
+                        .fontColor('#007BFF')
+
+                      //评论时间
+                      Text(item.comment.create_time.split('T')[0])
+                        .fontSize(12)
+                        .fontColor('#999')
+                        .margin({ left: 8 })
+                    }
+                    .width('100%')
+                    .padding({ bottom: 4 })
+
+                    //图片显示区域
+                    Grid() {
+                      ForEach( item.comment.images, (img: string) => {
+                        GridItem() {
+                          Image( BACKEND_IMAGE_BASE + img )
+                            .width('100%')
+                            .aspectRatio(1)
+                            .objectFit(ImageFit.Cover)
+                            .borderRadius(12)
+                            .transform(this.matrix)
                         }
-                        .align(Alignment.Top)
-                        .flexGrow(1)
-                        .width('60%')
+                      })
+                    }
+                    .columnsTemplate('1fr 1fr 1fr')
+                    .rowsGap(8)
+                    .columnsGap(8)
+                    .margin({ bottom: 16 })
+                    .align(Alignment.Start)
+                    .padding({ bottom: 4 })
 
-                        // 按钮区（靠右，固定宽度）
-                        Row({ space: 8 }) {
-                          Button({ type: ButtonType.Circle }) {
-                            Image(item.comment.is_liked ? $r('app.media.like_filled') : $r('app.media.like'))
-                              .width(18)
-                              .height(18)
-                          }
-                          .onClick(() => {
-                            this.comment = item.comment;
-                            this.likeComment();
-                          })
-                          .width(28)
-                          .height(28)
-                          .backgroundColor('transparent')
+                    //评论内容展示
+                    Text(item.comment.content)
+                      .width('100%')
+                      .fontSize(14)
+                      .fontColor('#222')
+                      .margin({ top: 2, bottom: 2, left: 20 })
+                      .textAlign(TextAlign.Start)
+                      .align(Alignment.Start)
 
-                          Text(item.comment.like_count.toString())
-                            .fontSize(12)
-                            .fontColor('#999')
-                            .textAlign(TextAlign.Center)
-                            .margin({ left: 2, right: 2 })
-
-                          Button('回复')
-                            .onClick(() => {
-                              this.handleReplyClick(item.comment);
-                            })
-                            .fontSize(11)
-                            .fontColor('#666')
-                            .backgroundColor('transparent')
-                            .padding({ left: 4, right: 4 })
-                        }
-                        .width(180)
-                        .align(Alignment.End)
+                    // 按钮区域
+                    Row({ space: 8 }) {
+                      Button({ type: ButtonType.Circle }) {
+                        Image(item.comment.is_liked ? $r('app.media.like_filled') : $r('app.media.like'))
+                          .width(18)
+                          .height(18)
                       }
-                      .width('100%') // Row占满整行
+                      .align(Alignment.End)
+                      .onClick(() => {
+                        this.comment = item.comment;
+                        this.likeComment();
+                      })
+                      .width(28)
+                      .height(28)
+                      .backgroundColor('transparent')
 
-                      // 子评论
-                      ForEach(item.replies, (reply: CommentTreeItem) => {
-                        Row() {
-                          // 头像
-                          Image($r('app.media.avatar_default'))
-                            .width(32)
-                            .height(32)
-                            .borderRadius(18)
-                            .backgroundColor('#FFF')
-                            .margin({
-                              right: 0,
-                              left: 0,
-                              top: 0,
-                              bottom: 0
-                            })
-                          // 内容区
+                      Text(item.comment.like_count.toString())
+                        .align(Alignment.End)
+                        .fontSize(12)
+                        .fontColor('#999')
+                        .textAlign(TextAlign.Center)
+                        .margin({ left: 2, right: 2 })
+
+                      Button('回复')
+                        .onClick(() => {
+                          this.handleReplyClick(item.comment);
+                        })
+                        .align(Alignment.End)
+                        .fontSize(12)
+                        .fontColor('#666')
+                        .backgroundColor('transparent')
+                        .padding({ left: 4, right: 4 })
+                    }
+                    .width('100%')
+
+                    //子评论区域
+                    List() {
+                      ForEach( item.replies , ( reply : CommentTreeItem) => {
+                        ListItem() {
                           Column() {
                             Row() {
+                              // 头像
+                              Image($r('app.media.avatar_default'))
+                                .width(32)
+                                .height(32)
+                                .borderRadius(18)
+                                .backgroundColor('#FFF')
+                                .margin({
+                                  right: 0,
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0
+                                })
+
                               Text(reply.comment.user_name)
                                 .fontWeight(FontWeight.Bold)
-                                .fontSize(13)
+                                .fontSize(14)
                                 .fontColor('#007BFF')
                               Text(reply.comment.create_time.split('T')[0])
                                 .fontSize(10)
                                 .fontColor('#999')
                                 .margin({ left: 8 })
+
                             }
 
                             Text(reply.comment.content)
-                              .fontSize(13)
+                              .fontSize(14)
                               .fontColor('#222')
                               .margin({ top: 2, bottom: 2 })
-                          }
-                          .flexGrow(1)
+                              .flexGrow(1)
 
-                          // 按钮区（固定宽度，与父评论一致）
-                          Row({ space: 8 }) {
-                            Button({ type: ButtonType.Circle }) {
-                              Image(reply.comment.is_liked ? $r('app.media.like_filled') : $r('app.media.like'))
-                                .width(16)
-                                .height(16)
-                            }
-                            .onClick(() => {
-                              this.comment = reply.comment;
-                              this.likeComment();
-                            })
-                            .width(24)
-                            .height(24)
-                            .backgroundColor('transparent')
-
-                            Text(reply.comment.like_count.toString())
-                              .fontSize(11)
-                              .fontColor('#999')
-                              .textAlign(TextAlign.Center)
-                              .margin({ left: 2, right: 8 })
-                            Button('回复')
+                            Row({ space: 8 }) {
+                              Button({ type: ButtonType.Circle }) {
+                                Image(reply.comment.is_liked ? $r('app.media.like_filled') : $r('app.media.like'))
+                                  .width(16)
+                                  .height(16)
+                              }
                               .onClick(() => {
-                                this.handleReplyClick(reply.comment);
+                                this.comment = reply.comment;
+                                this.likeComment();
                               })
-                              .fontSize(12)
-                              .fontColor('#666')
+                              .width(24)
+                              .height(24)
                               .backgroundColor('transparent')
-                              .padding({ left: 6, right: 6 })
-                          }
-                          .width(120) // 按钮区宽度加大
-                          .align(Alignment.End)
-                        }
-                        .margin({ left: 42, bottom: 8, right: 0 }) // 头像与父评论用户名左对齐
-                      })
-                    })
-                  }
 
-                  .padding({
-                    left: 0,
-                    right: 0,
-                    top: 8,
-                    bottom: 8
-                  }) // 确保评论容器无内边距
+                              Text(reply.comment.like_count.toString())
+                                .fontSize(11)
+                                .fontColor('#999')
+                                .textAlign(TextAlign.Center)
+                                .margin({ left: 2, right: 8 })
+                              Button('回复')
+                                .onClick(() => {
+                                  this.handleReplyClick(reply.comment);
+                                })
+                                .fontSize(12)
+                                .fontColor('#666')
+                                .backgroundColor('transparent')
+                                .padding({ left: 6, right: 6 })
+                            }
+                            .width(120) // 按钮区宽度加大
+                            .align(Alignment.End)
+
+                          }
+                          .margin({ top: 2, bottom: 2, left: 20 })
+                        }
+                        .margin({ top: 2, bottom: 2, left: 20 })
+                      })
+                    }
+                    .width('100%')
+                    .backgroundColor('#F5F5F5')
+                  }
+                  .backgroundColor('#F2F2F2')
+                  .width('100%')
                 }
-                .width('100%')
-                .backgroundColor('#FFF')
-                .padding({
-                  left: 0,
-                  right: 0,
-                  top: 8,
-                  bottom: 8
-                })
-              }.margin({ left: 0, right: 0 })
-              .padding({ left: 0, right: 0 })
-            }.margin({ left: 0, right: 0 })
-            .padding({ left: 0, right: 0 })
-          }.margin({ left: 0, right: 0 })
-          .padding({ left: 0, right: 0 })
-        }.margin({ left: 0, right: 0 })
-        .padding({ left: 0, right: 0, bottom: 110 }) // 让出更多底部空间，确保评论完整显示
-      }.margin({ left: 0, right: 0 })
-      .padding({ left: 0, right: 0 })
+              })
+
+            }
+            .divider({
+              strokeWidth: 1,
+              color: Color.Black,
+              startMargin: 10,
+              endMargin: 10
+            })
+          }
+        }
+        .backgroundColor('#F7F8FA')
+
+        ListItem() {}
+        .width('100%')
+        .height(50)
+      }
 
       // 固定底部栏
       Row({ space: 6 }) {
@@ -1463,17 +1446,33 @@ struct AntiqueDetail {
         .backgroundColor('transparent')
 
         // 评论输入框（直接渲染，无需条件和自动聚焦）
-        TextInput({ placeholder: '发表评论...', text: this.commentContent })
-          .onChange((value: string) => {
-            this.commentContent = value;
-          })
-          .type(InputType.Normal)
-          .height(36)
-          .borderRadius(18)
-          .padding({ left: 12 })
-          .backgroundColor('#FFFFFF')
-          .margin({ left: 2, right: 2 })
-          .width('40%')
+        if( this.replyParentId === null ) {
+          TextInput({ placeholder: '发表评论...', text: this.commentContent })
+            .onChange((value: string) => {
+              this.commentContent = value;
+            })
+            .type(InputType.Normal)
+            .height(36)
+            .borderRadius(18)
+            .padding({ left: 12 })
+            .backgroundColor('#FFFFFF')
+            .margin({ left: 2, right: 2 })
+            .width('40%')
+        }
+        else {
+          TextInput({ placeholder: '回复' + this.replyname , text: this.commentContent })
+            .onChange((value: string) => {
+              this.commentContent = value;
+            })
+            .type(InputType.Normal)
+            .height(36)
+            .borderRadius(18)
+            .padding({ left: 12 })
+            .backgroundColor('#FFFFFF')
+            .margin({ left: 2, right: 2 })
+            .width('40%')
+        }
+
 
         // 发送按钮
         Button({ type: ButtonType.Circle }) {
@@ -1529,9 +1528,6 @@ struct AntiqueDetail {
       .translate({ y: -56 })
       .shadow({ radius: 8, color: '#EEE' })
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('#F7F8FA')
   }
 }
 
