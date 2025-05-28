@@ -17,31 +17,31 @@
 
 - **博物馆浏览模块**：提供博物馆信息展示、排行榜、公告等功能，支持博物馆详情页查看简介、预约链接、官网链接及馆藏精品。
 
-![image-20250528102359404](.\image\image-20250528102359404.png)
+![image-20250528102359404](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102359404.png)
 
 - **用户与文物交互模块**：支持用户对文物点赞、评论、收藏，评论支持二级嵌套，点赞状态实时更新。
 
-![image-20250528102432408](.\image\image-20250528102432408.png)
+![image-20250528102432408](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102432408.png)
 
 - **以图搜图模块**：用户可上传图片或拍摄照片，系统通过 CLIP 模型提取图像特征，查询 Milvus 向量库，返回相似文物列表。
 
-![image-20250528102505926](.\image\image-20250528102505926.png)
+![image-20250528102505926](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102505926.png)
 
 - **用户动态模块**：用户可发布图文动态，查看全平台用户动态，支持点赞、评论操作，动态详情页支持图片预览。
 
-![image-20250528102513768](.\image\image-20250528102513768.png)
+![image-20250528102513768](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102513768.png)
 
 - **用户信息管理模块**：支持用户注册、登录，展示用户基础信息，登录状态下可切换编辑模式修改信息。
 
-![image-20250528102523677](.\image\image-20250528102523677.png)
+![image-20250528102523677](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102523677.png)
 
 - **登录 / 注册模块**：用户可通过手机号注册新账号或登录，登录信息本地持久化保存。
 
-![image-20250528102531693](.\image\image-20250528102531693.png)
+![image-20250528102531693](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102531693.png)
 
 - **收藏与浏览记录**：用户可查看收藏记录和浏览历史，点击文物可跳转详情页。
 
-![image-20250528102540296](.\image\image-20250528102540296.png)
+![image-20250528102540296](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102540296.png)
 
 ## 技术栈
 - **前端**：ArkTS + HarmonyOS + Stage 模型
