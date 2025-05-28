@@ -13,7 +13,7 @@
 ## 功能模块
 - **文物展览与详情展示**：支持文物浏览、搜索、分类筛选，文物详情页展示高清图片、基本信息、简介等，并支持点赞、评论、收藏操作。
 
-![image-20250528102442731]([.\image\image-20250528102442731.png](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102442731.png))
+![image-20250528102442731](https://github.com/BUCT-CS2201/HandheldMuseum/blob/main/image/image-20250528102442731.png)
 
 - **博物馆浏览模块**：提供博物馆信息展示、排行榜、公告等功能，支持博物馆详情页查看简介、预约链接、官网链接及馆藏精品。
 
